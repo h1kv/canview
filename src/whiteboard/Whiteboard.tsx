@@ -44,11 +44,23 @@ export function Whiteboard({ username }: WhiteboardProps) {
     sendWs,
     planElements,
     sendPlanUpdate,
+    pendingApprovals,
+    approveToolCall,
+    denyToolCall,
   } =
     useSocket(username);
 
   const usersRef = useRef(users);
   usersRef.current = users;
+
+  const pendingApprovalNodeIdsRef = useRef<Set<string>>(new Set());
+  pendingApprovalNodeIdsRef.current = useMemo(() => {
+    const nodeIds = new Set<string>();
+    for (const approval of pendingApprovals.values()) {
+      if (approval.nodeId) nodeIds.add(approval.nodeId);
+    }
+    return nodeIds;
+  }, [pendingApprovals]);
 
   const { requestRender } = useRender({
     canvasRef,
@@ -59,6 +71,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
     usersRef,
     selfIdRef,
     interactionStateRef,
+    pendingApprovalNodeIdsRef,
     graphVersion,
     traceVersion,
   });
@@ -271,6 +284,9 @@ export function Whiteboard({ username }: WhiteboardProps) {
           onNodeConfigChange={handleNodeConfigChange}
           onApprove={handleApprove}
           onReject={handleReject}
+          onApproveToolCall={approveToolCall}
+          onDenyToolCall={denyToolCall}
+          pendingApprovals={pendingApprovals}
           chainNodes={chainNodes}
           chainRunning={chainRunning}
           traceEvents={traceEvents}

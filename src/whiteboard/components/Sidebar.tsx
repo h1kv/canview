@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { BoardNode, NodeTypeConfig, NodeStatus, WorkspaceTab, NodeRunTraceEvent } from "../../types/index.js";
+import type { PendingApproval } from "../hooks/useSocket.js";
 import { ChatPanel } from "./ChatPanel.js";
 
 const PROVIDERS = ["openai", "anthropic", "google"] as const;
@@ -58,39 +59,89 @@ function BranchConfig({
 }: { node: BoardNode; onConfigChange: (patch: Record<string, unknown>) => void }) {
   const provider = (node.config?.provider as string) || "openai";
   const model = (node.config?.model as string) || MODELS[provider]?.[0] || "";
+  const conditionType = (node.config?.conditionType as string) || "nl";
+  const isExpr = conditionType === "expr";
+
   return (
     <>
-      <ConfigField label="Condition (natural language)">
-        <textarea
-          className="vsc-cfg-textarea"
-          rows={3}
-          value={(node.config?.condition as string) || ""}
-          placeholder="Did the previous step produce valid, working code?"
-          onChange={(e) => onConfigChange({ condition: e.target.value })}
-        />
+      <ConfigField label="Condition Mode">
+        <div style={{ display: "flex", gap: 8 }}>
+          <label className="vsc-cfg-check-label" style={{ flex: 1, justifyContent: "center", padding: "4px 0", border: `1px solid ${!isExpr ? "#0078d4" : "#d0d0d0"}`, borderRadius: 4, background: !isExpr ? "#e8f1fb" : "transparent", cursor: "pointer" }}>
+            <input
+              type="radio"
+              name={`conditionType-${node.id}`}
+              value="nl"
+              checked={!isExpr}
+              onChange={() => onConfigChange({ conditionType: "nl" })}
+              style={{ marginRight: 4 }}
+            />
+            Natural Language
+          </label>
+          <label className="vsc-cfg-check-label" style={{ flex: 1, justifyContent: "center", padding: "4px 0", border: `1px solid ${isExpr ? "#0078d4" : "#d0d0d0"}`, borderRadius: 4, background: isExpr ? "#e8f1fb" : "transparent", cursor: "pointer" }}>
+            <input
+              type="radio"
+              name={`conditionType-${node.id}`}
+              value="expr"
+              checked={isExpr}
+              onChange={() => onConfigChange({ conditionType: "expr" })}
+              style={{ marginRight: 4 }}
+            />
+            Expression
+          </label>
+        </div>
       </ConfigField>
-      <p className="vsc-cfg-hint">
-        The AI reads the previous node's output and answers true/false based on your condition.
-        Routes to <strong>True</strong> or <strong>False</strong> output ports.
-      </p>
-      <ConfigField label="Provider">
-        <select
-          className="vsc-cfg-select"
-          value={provider}
-          onChange={(e) => onConfigChange({ provider: e.target.value, model: MODELS[e.target.value]?.[0] || "" })}
-        >
-          {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </ConfigField>
-      <ConfigField label="Model">
-        <select
-          className="vsc-cfg-select"
-          value={model}
-          onChange={(e) => onConfigChange({ model: e.target.value })}
-        >
-          {(MODELS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </ConfigField>
+
+      {!isExpr ? (
+        <>
+          <ConfigField label="Condition (natural language)">
+            <textarea
+              className="vsc-cfg-textarea"
+              rows={3}
+              value={(node.config?.condition as string) || ""}
+              placeholder="Did the previous step produce valid, working code?"
+              onChange={(e) => onConfigChange({ condition: e.target.value })}
+            />
+          </ConfigField>
+          <p className="vsc-cfg-hint">
+            The AI reads the previous node's output and answers true/false based on your condition.
+            Routes to <strong>True</strong> or <strong>False</strong> output ports.
+          </p>
+          <ConfigField label="Provider">
+            <select
+              className="vsc-cfg-select"
+              value={provider}
+              onChange={(e) => onConfigChange({ provider: e.target.value, model: MODELS[e.target.value]?.[0] || "" })}
+            >
+              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Model">
+            <select
+              className="vsc-cfg-select"
+              value={model}
+              onChange={(e) => onConfigChange({ model: e.target.value })}
+            >
+              {(MODELS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </ConfigField>
+        </>
+      ) : (
+        <>
+          <ConfigField label="Expression">
+            <input
+              className="vsc-cfg-select vsc-cfg-textarea--mono"
+              type="text"
+              value={(node.config?.condition as string) || ""}
+              placeholder="output.length > 100"
+              onChange={(e) => onConfigChange({ condition: e.target.value })}
+            />
+          </ConfigField>
+          <p className="vsc-cfg-hint">
+            JS expression evaluated with <code>output</code> (string) and <code>length</code> (number) in scope.
+            Example: <code>output.includes("success")</code>, <code>length &gt; 500</code>.
+          </p>
+        </>
+      )}
     </>
   );
 }
@@ -254,12 +305,15 @@ interface SidebarProps {
   traceEvents: NodeRunTraceEvent[];
   activeRunId: string | null;
   socketRef: React.MutableRefObject<WebSocket | null>;
+  pendingApprovals: Map<string, PendingApproval>;
   onSetMode: (mode: string, typeId?: string) => void;
   onLabelChange: (label: string) => void;
   onDeleteNode: () => void;
   onNodeConfigChange: (nodeId: string, patch: Record<string, unknown>) => void;
   onApprove: () => void;
   onReject: () => void;
+  onApproveToolCall: (approvalId: string) => void;
+  onDenyToolCall: (approvalId: string) => void;
 }
 
 function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -539,13 +593,21 @@ export function Sidebar({
   traceEvents,
   activeRunId,
   socketRef,
+  pendingApprovals,
   onSetMode,
   onLabelChange,
   onDeleteNode,
   onNodeConfigChange,
   onApprove,
   onReject,
+  onApproveToolCall,
+  onDenyToolCall,
 }: SidebarProps) {
+  // Find pending approvals for the selected node
+  const selectedNodeApprovals = selectedNode
+    ? Array.from(pendingApprovals.entries()).filter(([, a]) => a.nodeId === selectedNode.id)
+    : [];
+
   const hasChainActivity = chainNodes.some((n) => n.status !== "idle");
   const sortedChainNodes = [...chainNodes].sort((a, b) => {
     const order: Record<string, number> = { running: 0, paused: 1, done: 2, error: 3, idle: 4 };
@@ -794,6 +856,26 @@ export function Sidebar({
                       <button type="button" className="vsc-review-approve" onClick={onApprove}>✓ Approve</button>
                       <button type="button" className="vsc-review-reject" onClick={onReject}>✕ Reject</button>
                     </div>
+                  </div>
+                )}
+                {selectedNodeApprovals.length > 0 && (
+                  <div className="vsc-review-panel">
+                    {selectedNodeApprovals.map(([approvalId, approval]) => (
+                      <div key={approvalId} className="vsc-approval-entry">
+                        <p className="vsc-review-msg" style={{ color: "#b45309" }}>
+                          Tool approval required: <strong>{approval.toolName}</strong>
+                        </p>
+                        {Object.keys(approval.args).length > 0 && (
+                          <pre className="vsc-output-text" style={{ fontSize: 10, maxHeight: 80, overflow: "auto", marginBottom: 6 }}>
+                            {JSON.stringify(approval.args, null, 2)}
+                          </pre>
+                        )}
+                        <div className="vsc-review-actions">
+                          <button type="button" className="vsc-review-approve" onClick={() => onApproveToolCall(approvalId)}>✓ Allow</button>
+                          <button type="button" className="vsc-review-reject" onClick={() => onDenyToolCall(approvalId)}>✕ Deny</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

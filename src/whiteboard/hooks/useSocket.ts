@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { NODE_TYPES } from "../config/nodeTypes.js";
 import type { BoardNode, BoardEdge, BoardUser, NodeTypeConfig, NodeStatus, NodeRunTraceEvent } from "../../types/index.js";
+
+export interface PendingApproval {
+  nodeId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
 
 function getSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -29,6 +35,9 @@ export interface UseSocketResult {
   sendWs: (msg: unknown) => void;
   planElements: string;
   sendPlanUpdate: (elements: string) => void;
+  pendingApprovals: Map<string, PendingApproval>;
+  approveToolCall: (approvalId: string) => void;
+  denyToolCall: (approvalId: string) => void;
 }
 
 export function useSocket(username: string): UseSocketResult {
@@ -47,6 +56,7 @@ export function useSocket(username: string): UseSocketResult {
   const [chainRunning, setChainRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [planElements, setPlanElements] = useState<string>("[]");
+  const [pendingApprovals, setPendingApprovals] = useState<Map<string, PendingApproval>>(new Map());
 
   useEffect(() => {
     const socket = new WebSocket(getSocketUrl());
@@ -192,12 +202,14 @@ export function useSocket(username: string): UseSocketResult {
       if (message.type === "chain:complete" || message.type === "chain:stopped") {
         setChainRunning(false);
         setActiveRunId(null);
+        setPendingApprovals(new Map());
         return;
       }
 
       if (message.type === "chain:error") {
         setChainRunning(false);
         setActiveRunId(null);
+        setPendingApprovals(new Map());
         console.error("Chain error:", message.message);
         return;
       }
@@ -214,6 +226,19 @@ export function useSocket(username: string): UseSocketResult {
         if (!trace?.id) return;
         nodeRunTraceEventsRef.current = [...nodeRunTraceEventsRef.current.slice(-499), trace];
         setTraceVersion((v) => v + 1);
+        return;
+      }
+
+      if (message.type === "tool:approval:request") {
+        const approvalId = message.approvalId as string;
+        const nodeId = message.nodeId as string;
+        const toolName = message.toolName as string;
+        const args = (message.args ?? {}) as Record<string, unknown>;
+        setPendingApprovals((prev) => {
+          const next = new Map(prev);
+          next.set(approvalId, { nodeId, toolName, args });
+          return next;
+        });
         return;
       }
 
@@ -238,6 +263,24 @@ export function useSocket(username: string): UseSocketResult {
     sendJson(socketRef, { type: "plan:update", elements });
   };
 
+  const approveToolCall = useCallback((approvalId: string) => {
+    sendJson(socketRef, { type: "tool:approval:approve", approvalId });
+    setPendingApprovals((prev) => {
+      const next = new Map(prev);
+      next.delete(approvalId);
+      return next;
+    });
+  }, [socketRef]);
+
+  const denyToolCall = useCallback((approvalId: string) => {
+    sendJson(socketRef, { type: "tool:approval:deny", approvalId });
+    setPendingApprovals((prev) => {
+      const next = new Map(prev);
+      next.delete(approvalId);
+      return next;
+    });
+  }, [socketRef]);
+
   return {
     status,
     users,
@@ -254,5 +297,8 @@ export function useSocket(username: string): UseSocketResult {
     sendWs: (msg: unknown) => sendJson(socketRef, msg),
     planElements,
     sendPlanUpdate,
+    pendingApprovals,
+    approveToolCall,
+    denyToolCall,
   };
 }
