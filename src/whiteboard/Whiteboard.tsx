@@ -7,7 +7,10 @@ import { ActivityBar } from "./components/ActivityBar.js";
 import { Canvas } from "./components/Canvas.js";
 import { PlanCanvas } from "./components/PlanCanvas.js";
 import { Sidebar } from "./components/Sidebar.js";
+import { Terminal } from "./components/Terminal.js";
 import type { InteractionState, NodeV2Type, View, WorkspaceTab } from "../types/index.js";
+
+const TERMINAL_HEIGHT = 200;
 
 interface WhiteboardProps {
   username: string;
@@ -26,6 +29,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
 
   const [sidebarTab, setSidebarTab] = useState<string | null>("toolbox");
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("canvas");
+  const [terminalOpen, setTerminalOpen] = useState(false);
 
   const {
     status,
@@ -36,10 +40,17 @@ export function Whiteboard({ username }: WhiteboardProps) {
     socketRef,
     graphVersion,
     chainRunning,
+    terminalLogs,
+    clearTerminal,
     sendWs,
     planElements,
     sendPlanUpdate,
   } = useSocket(username);
+
+  // Auto-open terminal when chain produces output
+  useEffect(() => {
+    if (terminalLogs.length > 0) setTerminalOpen(true);
+  }, [terminalLogs.length]);
 
   const usersRef = useRef(users);
   usersRef.current = users;
@@ -161,40 +172,49 @@ export function Whiteboard({ username }: WhiteboardProps) {
       />
 
       <div className={`vsc-workspace${sidebarTab === null ? " sidebar-collapsed" : ""}`}>
-        <div className="vsc-surface-stack">
-          <section
-            id="canvas-panel"
-            role="tabpanel"
-            hidden={workspaceTab !== "canvas"}
-            className="vsc-surface-panel"
-          >
-            <Canvas
-              canvasRef={canvasRef}
-              mode={mode}
-              modeLabel={modeLabel}
-              zoomPercent={zoomPercent}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onContextMenu={handleContextMenu}
-              onAdjustZoom={adjustZoom}
-              onResetZoom={resetZoom}
-              contextMenu={contextMenu}
-              onContextMenuClose={closeContextMenu}
-              onContextMenuDelete={deleteNodeById}
-            />
-          </section>
-          <section
-            id="plan-panel"
-            role="tabpanel"
-            hidden={workspaceTab !== "plan"}
-            className="vsc-surface-panel"
-          >
-            <PlanCanvas
-              elements={planElements}
-              onUpdate={sendPlanUpdate}
-            />
-          </section>
+        <div className="vsc-surface-stack" style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+            <section
+              id="canvas-panel"
+              role="tabpanel"
+              hidden={workspaceTab !== "canvas"}
+              className="vsc-surface-panel"
+            >
+              <Canvas
+                canvasRef={canvasRef}
+                mode={mode}
+                modeLabel={modeLabel}
+                zoomPercent={zoomPercent}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onContextMenu={handleContextMenu}
+                onAdjustZoom={adjustZoom}
+                onResetZoom={resetZoom}
+                contextMenu={contextMenu}
+                onContextMenuClose={closeContextMenu}
+                onContextMenuDelete={deleteNodeById}
+              />
+            </section>
+            <section
+              id="plan-panel"
+              role="tabpanel"
+              hidden={workspaceTab !== "plan"}
+              className="vsc-surface-panel"
+            >
+              <PlanCanvas
+                elements={planElements}
+                onUpdate={sendPlanUpdate}
+              />
+            </section>
+          </div>
+          <Terminal
+            logs={terminalLogs}
+            open={terminalOpen}
+            height={TERMINAL_HEIGHT}
+            onClose={() => setTerminalOpen(false)}
+            onClear={clearTerminal}
+          />
         </div>
 
         <Sidebar
@@ -240,6 +260,21 @@ export function Whiteboard({ username }: WhiteboardProps) {
           </span>
           <span className="vsc-ssep" />
           <span className="vsc-sitem">{connectedUsers.length} online</span>
+          <span className="vsc-ssep" />
+          <button
+            type="button"
+            className={`vsc-sitem vsc-sitem-btn vsc-sitem-terminal${terminalOpen ? " active" : ""}`}
+            onClick={() => setTerminalOpen((o) => !o)}
+            title={terminalOpen ? "Hide terminal" : "Show terminal"}
+          >
+            <svg width="11" height="9" viewBox="0 0 11 9" fill="currentColor" aria-hidden="true">
+              <path d="M0 1h11M0 5h7M0 9h5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            </svg>
+            Terminal
+            {terminalLogs.length > 0 && !terminalOpen && (
+              <span style={{ marginLeft: 3, opacity: 0.65 }}>({terminalLogs.length})</span>
+            )}
+          </button>
           <span className="vsc-ssep" />
           <button type="button" className="vsc-sitem vsc-sitem-btn" onClick={() => adjustZoom(1.15)} aria-label="Zoom in">+</button>
           <button type="button" className="vsc-sitem vsc-sitem-btn" onClick={() => resetZoom()} title="Reset zoom">

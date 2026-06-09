@@ -43,97 +43,127 @@ function NodeButton({
   return (
     <button
       type="button"
-      className={`vsc-list-item${isPlacing ? " active" : ""}`}
+      className={`vsc-list-item${isPlacing ? " vsc-list-item--placing" : ""}`}
       onClick={() => onPlace(type)}
       title={`Place ${def.label} node`}
     >
-      <span className="vsc-list-icon" aria-hidden="true">
-        <span
-          className="vsc-glyph shape-terminator"
-          style={{ borderColor: def.accent, background: `${def.accent}22` }}
-        />
-      </span>
+      <span className="vsc-node-dot" style={{ background: def.accent }} />
       <span className="vsc-list-label">{def.label}</span>
-      <span className="vsc-list-badge" style={{ color: def.accent }}>V2</span>
     </button>
   );
 }
 
-function ConfigEditor({
+function NodeProperties({
   node,
+  titleDraft,
+  onTitleChange,
   onConfigChange,
+  onDelete,
 }: {
   node: NodeV2;
-  onConfigChange: (config: Partial<NodeV2Config>) => void;
+  titleDraft: string;
+  onTitleChange: (t: string) => void;
+  onConfigChange: (c: Partial<NodeV2Config>) => void;
+  onDelete: () => void;
 }) {
   const def = NODE_REGISTRY[node.type];
-  if (!def) return null;
+  const isSDLC = SDLC_NODE_TYPES.includes(node.type as typeof SDLC_NODE_TYPES[number]);
 
   return (
-    <>
-      {node.type === "initialiser" && (
-        <label className="vsc-prop-row vsc-prop-row--col">
-          <span className="vsc-prop-key">Workspace Path</span>
-          <input
-            className="vsc-prop-input"
-            type="text"
-            value={node.config?.workspacePath ?? ""}
-            onChange={(e) => onConfigChange({ workspacePath: e.target.value })}
-            spellCheck={false}
-            placeholder="./workspace"
-          />
-        </label>
-      )}
-
-      {node.type === "context" && (
-        <label className="vsc-prop-row vsc-prop-row--col">
-          <span className="vsc-prop-key">Context Content</span>
-          <textarea
-            className="vsc-prop-textarea"
-            value={node.config?.content ?? ""}
-            onChange={(e) => onConfigChange({ content: e.target.value })}
-            spellCheck={false}
-            placeholder="Enter context to inject into connected nodes…"
-            rows={5}
-          />
-        </label>
-      )}
-
-      {SDLC_NODE_TYPES.includes(node.type as typeof SDLC_NODE_TYPES[number]) && (
-        <label className="vsc-prop-row vsc-prop-row--col">
-          <span className="vsc-prop-key">Task Prompt</span>
-          <textarea
-            className="vsc-prop-textarea"
-            value={node.config?.taskPrompt ?? ""}
-            onChange={(e) => onConfigChange({ taskPrompt: e.target.value })}
-            spellCheck={false}
-            placeholder={`What should the ${def.label} agent do in this run?`}
-            rows={5}
-          />
-        </label>
-      )}
-
-      {node.status && node.status !== "idle" && (
-        <div className="vsc-prop-row vsc-prop-row--col">
-          <span className="vsc-prop-key">Status</span>
-          <span
-            className="vsc-prop-val"
-            style={{
-              color: node.status === "done" ? "#1a9e5a" : node.status === "error" ? "#d93f3f" : "#e6a817",
-            }}
-          >
+    <div className="vsc-inspector">
+      {/* Header */}
+      <div className="vsc-inspector-hdr">
+        <span
+          className="vsc-inspector-badge"
+          style={{ background: `${def.accent}18`, color: def.accent, borderColor: `${def.accent}40` }}
+        >
+          {def.label}
+        </span>
+        <span className="vsc-inspector-pos">{Math.round(node.x)}, {Math.round(node.y)}</span>
+        {node.status && node.status !== "idle" && (
+          <span className={`vsc-inspector-status vsc-inspector-status--${node.status}`}>
             {node.status}
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
-      {node.output && node.status === "error" && (
-        <div className="vsc-prop-row vsc-prop-row--col">
-          <span className="vsc-prop-key">Error</span>
-          <span className="vsc-prop-val vsc-prop-val--error">{node.output}</span>
-        </div>
-      )}
-    </>
+      <div className="vsc-inspector-body">
+        {/* Title */}
+        <label className="vsc-field">
+          <span className="vsc-field-label">Title</span>
+          <input
+            className="vsc-field-input"
+            type="text"
+            value={titleDraft}
+            onChange={(e) => onTitleChange(e.target.value)}
+            spellCheck={false}
+          />
+        </label>
+
+        {/* Workspace path for Initialiser */}
+        {node.type === "initialiser" && (
+          <label className="vsc-field">
+            <span className="vsc-field-label">Workspace Path</span>
+            <input
+              className="vsc-field-input"
+              type="text"
+              value={node.config?.workspacePath ?? ""}
+              onChange={(e) => onConfigChange({ workspacePath: e.target.value })}
+              spellCheck={false}
+              placeholder="./workspace"
+            />
+          </label>
+        )}
+
+        {/* Context content */}
+        {node.type === "context" && (
+          <label className="vsc-field">
+            <span className="vsc-field-label">Context</span>
+            <textarea
+              className="vsc-field-textarea"
+              value={node.config?.content ?? ""}
+              onChange={(e) => onConfigChange({ content: e.target.value })}
+              spellCheck={false}
+              placeholder="Context to inject into connected nodes…"
+              rows={5}
+            />
+          </label>
+        )}
+
+        {/* Task prompt for SDLC */}
+        {isSDLC && (
+          <label className="vsc-field">
+            <span className="vsc-field-label">Task Prompt</span>
+            <textarea
+              className="vsc-field-textarea"
+              value={node.config?.taskPrompt ?? ""}
+              onChange={(e) => onConfigChange({ taskPrompt: e.target.value })}
+              spellCheck={false}
+              placeholder={`What should ${def.label} do in this run?`}
+              rows={5}
+            />
+          </label>
+        )}
+
+        {/* Error output */}
+        {node.status === "error" && node.output && (
+          <div className="vsc-field">
+            <span className="vsc-field-label">Error</span>
+            <div className="vsc-field-error">{node.output}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="vsc-inspector-footer">
+        <button type="button" className="vsc-inspector-delete" onClick={onDelete}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66H14.5a.5.5 0 0 0 0-1h-.995a.59.59 0 0 0-.01 0z"/>
+          </svg>
+          Delete node
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -174,56 +204,50 @@ export function Sidebar({
 
       {isToolbox && workspaceTab === "canvas" && (
         <>
-          <h2 className="vsc-sidebar-title">Canvas</h2>
+          <div className="vsc-sidebar-head">Canvas</div>
 
-          {/* Run / Stop chain */}
-          <section>
-            <div className="vsc-section-hdr">Chain</div>
+          {/* Run / Stop */}
+          <div className="vsc-sidebar-section">
             {chainRunning ? (
-              <button
-                type="button"
-                className="vsc-list-item vsc-run-btn vsc-run-btn--stop"
-                onClick={onStopChain}
-              >
-                <span className="vsc-list-label">Stop Chain</span>
+              <button type="button" className="vsc-chain-btn vsc-chain-btn--stop" onClick={onStopChain}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+                  <rect width="10" height="10" rx="2" />
+                </svg>
+                Stop Chain
               </button>
             ) : (
               <button
                 type="button"
-                className="vsc-list-item vsc-run-btn"
+                className="vsc-chain-btn"
                 onClick={onRunChain}
                 disabled={!hasInitialiser}
-                title={!hasInitialiser ? "Add an Initialiser node first" : "Run the node chain"}
+                title={!hasInitialiser ? "Add an Initialiser node first" : undefined}
               >
-                <span className="vsc-list-label">Run Chain</span>
+                <svg width="10" height="11" viewBox="0 0 10 11" fill="currentColor" aria-hidden="true">
+                  <path d="M0 1.5 9 5.5 0 9.5z" />
+                </svg>
+                Run Chain
               </button>
             )}
-          </section>
+          </div>
 
-          {/* Infrastructure nodes */}
-          <section>
+          {/* Infrastructure */}
+          <div className="vsc-sidebar-section">
             <div className="vsc-section-hdr">Infrastructure</div>
             <div className="vsc-list">
-              <NodeButton
-                type="initialiser"
-                isPlacing={mode === "place" && placingType === "initialiser"}
-                onPlace={handlePlace}
-              />
-              <NodeButton
-                type="materialize"
-                isPlacing={mode === "place" && placingType === "materialize"}
-                onPlace={handlePlace}
-              />
-              <NodeButton
-                type="context"
-                isPlacing={mode === "place" && placingType === "context"}
-                onPlace={handlePlace}
-              />
+              {(["initialiser", "materialize", "context"] as NodeV2Type[]).map((type) => (
+                <NodeButton
+                  key={type}
+                  type={type}
+                  isPlacing={mode === "place" && placingType === type}
+                  onPlace={handlePlace}
+                />
+              ))}
             </div>
-          </section>
+          </div>
 
-          {/* SDLC nodes */}
-          <section>
+          {/* SDLC */}
+          <div className="vsc-sidebar-section">
             <div className="vsc-section-hdr">SDLC</div>
             <div className="vsc-list">
               {SDLC_NODE_TYPES.map((type) => (
@@ -235,58 +259,38 @@ export function Sidebar({
                 />
               ))}
             </div>
-          </section>
+          </div>
 
-          {/* Pointer / select mode */}
-          <section>
+          {/* Actions */}
+          <div className="vsc-sidebar-section">
             <div className="vsc-section-hdr">Actions</div>
             <button
               type="button"
-              className={`vsc-list-item${mode === "select" ? " active" : ""}`}
+              className={`vsc-list-item${mode === "select" ? " vsc-list-item--active" : ""}`}
               onClick={() => onSetMode("select")}
             >
-              <span className="vsc-list-icon" aria-hidden="true">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M1.5 1 7 13.5l2.1-5.2L14.5 6z" />
-                </svg>
-              </span>
+              <svg className="vsc-list-icon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M1.5 1 7 13.5l2.1-5.2L14.5 6z" />
+              </svg>
               <span className="vsc-list-label">Pointer</span>
             </button>
-          </section>
+          </div>
 
-          {/* Properties panel */}
-          {selectedNode ? (
-            <section className="vsc-props">
-              <div className="vsc-section-hdr">Properties</div>
-              <label className="vsc-prop-row">
-                <span className="vsc-prop-key">Title</span>
-                <input
-                  className="vsc-prop-input"
-                  type="text"
-                  value={selectedTitleDraft}
-                  onChange={(e) => onTitleChange(e.target.value)}
-                  spellCheck={false}
-                />
-              </label>
-              <div className="vsc-prop-row">
-                <span className="vsc-prop-key">Type</span>
-                <span className="vsc-prop-val">{selectedNode.type}</span>
-              </div>
-              <div className="vsc-prop-row">
-                <span className="vsc-prop-key">Position</span>
-                <span className="vsc-prop-val">{Math.round(selectedNode.x)}, {Math.round(selectedNode.y)}</span>
-              </div>
-              <ConfigEditor node={selectedNode} onConfigChange={onConfigChange} />
-              <button type="button" className="vsc-prop-delete" onClick={onDeleteNode}>
-                Delete node
-              </button>
-            </section>
-          ) : (
-            <SidebarPlaceholder
-              title="No node selected"
-              body="Click a node to edit its properties."
-            />
-          )}
+          {/* Properties */}
+          <div className="vsc-sidebar-section vsc-sidebar-section--grow">
+            <div className="vsc-section-hdr">Properties</div>
+            {selectedNode ? (
+              <NodeProperties
+                node={selectedNode}
+                titleDraft={selectedTitleDraft}
+                onTitleChange={onTitleChange}
+                onConfigChange={onConfigChange}
+                onDelete={onDeleteNode}
+              />
+            ) : (
+              <p className="vsc-props-empty">Select a node to edit its properties.</p>
+            )}
+          </div>
         </>
       )}
 

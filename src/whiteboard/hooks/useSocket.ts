@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoardUser, EdgeV2, NodeV2, NodeStatus } from "../../types/index.js";
+
+export type TerminalLevel = "info" | "warn" | "error" | "done";
+export interface TerminalEntry {
+  id: number;
+  ts: number;
+  level: TerminalLevel;
+  msg: string;
+}
 
 function getSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -21,6 +29,8 @@ export interface UseSocketResult {
   socketRef: React.MutableRefObject<WebSocket | null>;
   graphVersion: number;
   chainRunning: boolean;
+  terminalLogs: TerminalEntry[];
+  clearTerminal: () => void;
   sendWs: (msg: unknown) => void;
   planElements: string;
   sendPlanUpdate: (elements: string) => void;
@@ -38,8 +48,17 @@ export function useSocket(username: string): UseSocketResult {
   const [graphVersion, setGraphVersion] = useState(0);
   const [planElements, setPlanElements] = useState("[]");
   const [chainRunning, setChainRunning] = useState(false);
+  const [terminalLogs, setTerminalLogs] = useState<TerminalEntry[]>([]);
+  const logIdRef = useRef(0);
 
   function bumpGraph() { setGraphVersion((v) => v + 1); }
+
+  function pushLog(level: TerminalLevel, msg: string) {
+    const entry: TerminalEntry = { id: ++logIdRef.current, ts: Date.now(), level, msg };
+    setTerminalLogs((prev) => [...prev.slice(-199), entry]);
+  }
+
+  const clearTerminal = useCallback(() => setTerminalLogs([]), []);
 
   useEffect(() => {
     const socket = new WebSocket(getSocketUrl());
@@ -110,11 +129,15 @@ export function useSocket(username: string): UseSocketResult {
           const nodeId = message.nodeId as string;
           const existing = nodesRef.current.get(nodeId);
           if (existing) {
+            const newStatus = message.status as NodeStatus;
             nodesRef.current.set(nodeId, {
               ...existing,
-              status: message.status as NodeStatus,
+              status: newStatus,
               output: message.output as string | null,
             });
+            if (newStatus === "running") pushLog("info", `Running: ${existing.title}`);
+            if (newStatus === "done") pushLog("done", `Done: ${existing.title}`);
+            if (newStatus === "error") pushLog("error", `Error in "${existing.title}": ${message.output as string}`);
             bumpGraph();
           }
           return;
@@ -141,13 +164,25 @@ export function useSocket(username: string): UseSocketResult {
 
         case "chain:started": {
           setChainRunning(true);
+          pushLog("info", "Chain started");
           return;
         }
 
-        case "chain:complete":
-        case "chain:stopped":
+        case "chain:complete": {
+          setChainRunning(false);
+          pushLog("done", "Chain complete");
+          return;
+        }
+
+        case "chain:stopped": {
+          setChainRunning(false);
+          pushLog("warn", "Chain stopped by user");
+          return;
+        }
+
         case "chain:error": {
           setChainRunning(false);
+          pushLog("error", `Chain error: ${message.message as string}`);
           return;
         }
 
@@ -182,6 +217,8 @@ export function useSocket(username: string): UseSocketResult {
     socketRef,
     graphVersion,
     chainRunning,
+    terminalLogs,
+    clearTerminal,
     sendWs: (msg: unknown) => sendJson(socketRef, msg),
     planElements,
     sendPlanUpdate: (elements: string) => sendJson(socketRef, { type: "plan:update", elements }),
