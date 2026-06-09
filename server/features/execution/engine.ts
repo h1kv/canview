@@ -1,5 +1,5 @@
 import path from "node:path";
-import { callOpenAI, callOpenAIToolRound, type OpenAIMessage } from "./providers/openai.js";
+import { callOpenAI, callOpenAIToolRound, callOpenAIResponses, type OpenAIMessage } from "./providers/openai.js";
 import {
   buildAgentToolInstructions,
   executeAgentTool,
@@ -10,7 +10,7 @@ import {
   type AgentToolName,
 } from "./tools/agentTools.js";
 import type { NodeRunTraceKind } from "../../../shared/types.js";
-import { NODE_SKILLS } from "../skills/index.js";
+import { getSkillPrompt } from "../skills/loader.js";
 
 export type NodeStatus = "idle" | "running" | "done" | "error" | "paused";
 
@@ -146,6 +146,16 @@ async function callAIWithTools(
   if (allowedTools.length === 0 || maxToolCalls <= 0) {
     emitTrace({ kind: "node:model", level: "info", message: `Model call: openai/${model}` });
     return callOpenAI(model, systemPrompt, userMessage);
+  }
+
+  // Use OpenAI Responses API (native web search) when web_search is enabled
+  if (allowedTools.includes("web_search")) {
+    emitTrace({ kind: "node:model", level: "info", message: `Model call: openai/${model} (Responses API)` });
+    emitTrace({ kind: "node:tool-call", level: "info", message: "Calling web_search", data: { toolName: "web_search" } });
+    const result = await callOpenAIResponses({ model, systemPrompt, userMessage });
+    emitTrace({ kind: "node:tool-result", level: "info", message: "web_search completed", data: { toolName: "web_search", preview: result.slice(0, 240) } });
+    emitTrace({ kind: "node:output", level: "info", message: "Final output", data: { preview: result.slice(0, 240) } });
+    return result;
   }
 
   return callOpenAIWithNativeTools(model, systemPrompt, userMessage, allowedTools, maxToolCalls, emitTrace);
@@ -284,7 +294,7 @@ function buildSystemPrompt(role: string, taskDescription: string, contextNotes?:
 
   // The editable node prompt is task input. System instructions stay internal
   // so each role can behave like a reusable skill.
-  const primary = NODE_SKILLS[role] || "";
+  const primary = getSkillPrompt(role);
   if (primary) parts.push(primary);
 
   if (taskDescription) parts.push(`## Task Goal\n${taskDescription}`);

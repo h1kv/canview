@@ -118,3 +118,48 @@ export async function callOpenAIToolRound(
 }
 
 export type { OpenAIMessage };
+
+interface ResponsesAPIOutput {
+  type: string;
+  content?: Array<{ type: string; text?: string }>;
+  text?: string;
+}
+
+export async function callOpenAIResponses(params: {
+  model: string;
+  systemPrompt: string;
+  userMessage: string;
+}): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: params.model,
+      tools: [{ type: "web_search_preview" }],
+      instructions: params.systemPrompt,
+      input: params.userMessage,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI Responses API error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json() as { output?: ResponsesAPIOutput[] };
+  for (const item of data.output ?? []) {
+    if (item.type === "message") {
+      for (const part of item.content ?? []) {
+        if (part.type === "output_text" && part.text) return part.text;
+      }
+    }
+    if (item.text) return item.text;
+  }
+  return "";
+}
