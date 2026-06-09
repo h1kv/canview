@@ -8,7 +8,7 @@ export type NodeCategory = "start" | "ai-step" | "review" | "control" | "tool" |
 
 export type NodeStatus = "idle" | "running" | "done" | "error" | "paused";
 
-export type WorkspaceTab = "canvas" | "plan";
+export type WorkspaceTab = "canvas" | "plan" | "skills";
 
 export type NodeRunTraceKind =
   | "chain:started"

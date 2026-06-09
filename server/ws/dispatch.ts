@@ -7,6 +7,7 @@ import { handleCursorUpdate } from "./handlers/cursor.js";
 import { handleChainRun, handleChainStop, handleReviewApprove, handleReviewReject, handleToolApprovalApprove, handleToolApprovalDeny } from "./handlers/chain.js";
 import { handleChatMessage, handleChatApply } from "./handlers/chat.js";
 import { handlePlanUpdate } from "./handlers/plan.js";
+import { handleSkillList, handleSkillUpdate } from "./handlers/skill.js";
 import { users } from "../state/store.js";
 
 export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): void {
@@ -44,6 +45,8 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "tool:approval:deny":       return handleToolApprovalDeny(ws, userId, message);
     case "chat:message":       void handleChatMessage(ws, userId, message); return;
     case "chat:apply":         void handleChatApply(ws, userId, message); return;
+    case "skill:list":         void handleSkillList(ws); return;
+    case "skill:update":       void handleSkillUpdate(ws, message); return;
     default: debug("unknown-message", { userId, type: message.type });
   }
 }

@@ -25,7 +25,7 @@ export const NODE_TYPES: NodeTypeConfig[] = [
   {
     id: "agent",
     label: "Agent Step",
-    description: "Configurable AI reasoning step. Select a role (Investigate, Plan, Design, Create, Evaluate, Document) and provide the task prompt for this step.",
+    description: "Configurable AI reasoning step. Select a role (Investigate, Plan, Design, Create, Evaluate, Document, Test, Debug, Refactor, Deploy) and provide the task prompt for this step.",
     shape: "rect",
     width: 240,
     height: 100,
@@ -42,6 +42,7 @@ export const NODE_TYPES: NodeTypeConfig[] = [
       provider: "openai",
       tools: ["web_search", "fetch_url"],
       maxToolCalls: 6,
+      // Full SDLC role set: investigate, plan, design, create, evaluate, document, test, debug, refactor, deploy
     },
   },
   {
