@@ -5,14 +5,17 @@ import { getNodeTypeMap } from "./config/nodeTypes.js";
 const HEADER_H = 28;
 const PORT_RADIUS = 5;
 
-const AGENT_ROLE_ACCENTS: Record<string, string> = {
-  investigate: "#0078d4",
-  plan:        "#5c6bc0",
-  design:      "#6f42c1",
-  create:      "#00897b",
-  evaluate:    "#c07c00",
-  document:    "#558b2f",
-  custom:      "#607d8b",
+const ROLE_COLORS: Record<string, string> = {
+  investigate: "#1565c0",
+  plan:        "#2e7d32",
+  design:      "#6a1b9a",
+  create:      "#e65100",
+  evaluate:    "#00838f",
+  document:    "#4e342e",
+  test:        "#c62828",
+  debug:       "#37474f",
+  refactor:    "#f9a825",
+  deploy:      "#0277bd",
 };
 
 let animOffset = 0;
@@ -119,7 +122,7 @@ function drawNode(
   let accent = nodeType?.accent ?? "#8b8b8b";
   if (nodeType?.id === "agent") {
     const role = (node.config?.role as string) || "investigate";
-    accent = AGENT_ROLE_ACCENTS[role] ?? accent;
+    accent = ROLE_COLORS[role] ?? "#5c6bc0";
   }
   const status = node.status ?? "idle";
 
@@ -175,16 +178,34 @@ function drawNode(
   ctx.fillRect(x, y, width, HEADER_H);
   ctx.restore();
 
-  // Header: type label
+  // Header: type label (for agent nodes: role as primary label, "Agent" as sub-label)
   ctx.fillStyle = "#ffffff";
-  ctx.font = `600 10px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
   ctx.letterSpacing = "0.06em";
-  const headerLabel = nodeType?.id === "agent"
-    ? ((node.config?.role as string) || "agent").toUpperCase()
-    : (nodeType?.label ?? "Node").toUpperCase();
-  ctx.fillText(headerLabel, x + 10, y + HEADER_H / 2);
+
+  if (nodeType?.id === "agent") {
+    const role = (node.config?.role as string) || "agent";
+    const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+    const subLabel = node.label && node.label !== role ? node.label : "Agent";
+
+    // Primary role label
+    ctx.font = `700 11px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(roleLabel, x + 10, y + HEADER_H / 2 - 4);
+
+    // Sub-label "Agent" (or custom node label)
+    ctx.font = `400 9px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.letterSpacing = "0.04em";
+    ctx.fillText(subLabel.toUpperCase(), x + 10, y + HEADER_H / 2 + 7);
+    ctx.fillStyle = "#ffffff";
+  } else {
+    ctx.font = `600 10px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textBaseline = "middle";
+    const headerLabel = (nodeType?.label ?? "Node").toUpperCase();
+    ctx.fillText(headerLabel, x + 10, y + HEADER_H / 2);
+  }
+
   ctx.letterSpacing = "0em";
 
   // Status dot (right of header)

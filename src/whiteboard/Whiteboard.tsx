@@ -9,6 +9,7 @@ import { ActivityBar } from "./components/ActivityBar.js";
 import { Canvas } from "./components/Canvas.js";
 import { PlanCanvas } from "./components/PlanCanvas.js";
 import { Sidebar } from "./components/Sidebar.js";
+import { SkillsPanel } from "./components/SkillsPanel.js";
 import type { View, InteractionState, BoardNode, WorkspaceTab } from "../types/index.js";
 import type { PlanInteractionState } from "./renderPlan.js";
 
@@ -215,33 +216,33 @@ export function Whiteboard({ username }: WhiteboardProps) {
 
   return (
     <div className="vsc-shell">
-      <TitleBar status={status} userCount={connectedUsers.length} chainRunning={chainRunning} runningNodeLabel={runningNodeLabel} onRun={handleRun} onStop={handleStop} />
+      {status === "connecting" && (
+        <div className="dispatch-loading" aria-live="polite" aria-label="Connecting to DISPATCH.AI">
+          <div className="dispatch-loading-text">DISPATCH.AI</div>
+        </div>
+      )}
+      <TitleBar
+        status={status}
+        userCount={connectedUsers.length}
+        chainRunning={chainRunning}
+        runningNodeLabel={runningNodeLabel}
+        workspaceTab={workspaceTab}
+        onRun={handleRun}
+        onStop={handleStop}
+        onWorkspaceTabChange={setWorkspaceTab}
+      />
 
-      <div className="vsc-surface-tabs" role="tablist" aria-label="Workspace">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={workspaceTab === "canvas"}
-          aria-controls="canvas-panel"
-          className={`vsc-surface-tab${workspaceTab === "canvas" ? " active" : ""}`}
-          onClick={() => setWorkspaceTab("canvas")}
-        >
-          Canvas
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={workspaceTab === "plan"}
-          aria-controls="plan-panel"
-          className={`vsc-surface-tab${workspaceTab === "plan" ? " active" : ""}`}
-          onClick={() => setWorkspaceTab("plan")}
-        >
-          Plan
-        </button>
-      </div>
-
-      <div className={`vsc-workspace${sidebarTab === null ? " sidebar-collapsed" : ""}`}>
+      <div className={`vsc-workspace${sidebarTab === null ? " sidebar-collapsed" : ""}${workspaceTab === "skills" ? " skills-active" : ""}`}>
         <div className="vsc-surface-stack">
+          {workspaceTab === "skills" && (
+            <section
+              id="skills-panel"
+              role="tabpanel"
+              className="vsc-surface-panel"
+            >
+              <SkillsPanel socketRef={socketRef} />
+            </section>
+          )}
           <section
             id="canvas-panel"
             role="tabpanel"

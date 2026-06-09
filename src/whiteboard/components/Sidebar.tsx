@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { BoardNode, NodeTypeConfig, NodeStatus, PlanNode, PlanNodeKind, WorkspaceTab, NodeRunTraceEvent } from "../../types/index.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { PlanSidebarPanel } from "./PlanSidebarPanel.js";
@@ -353,7 +353,10 @@ const AGENT_ROLES = [
   { value: "create",      label: "Create" },
   { value: "evaluate",    label: "Evaluate" },
   { value: "document",    label: "Document" },
-  { value: "custom",      label: "Custom" },
+  { value: "test",        label: "Test" },
+  { value: "debug",       label: "Debug" },
+  { value: "refactor",    label: "Refactor" },
+  { value: "deploy",      label: "Deploy" },
 ];
 
 const AGENT_TOOLS = [
@@ -534,6 +537,8 @@ function StartConfig({
   );
 }
 
+type SidebarContentTab = "config" | "trace" | "chat";
+
 export function Sidebar({
   workspaceTab,
   sidebarTab,
@@ -563,6 +568,15 @@ export function Sidebar({
   onPlanNodeDelete,
   onPlanNodeConnect,
 }: SidebarProps) {
+  const [contentTab, setContentTab] = useState<SidebarContentTab>("config");
+
+  // Auto-switch to Trace tab when chain starts running
+  useEffect(() => {
+    if (chainRunning) {
+      setContentTab("trace");
+    }
+  }, [chainRunning]);
+
   const hasChainActivity = chainNodes.some((n) => n.status !== "idle");
   const sortedChainNodes = [...chainNodes].sort((a, b) => {
     const order: Record<string, number> = { running: 0, paused: 1, done: 2, error: 3, idle: 4 };
@@ -583,7 +597,7 @@ export function Sidebar({
     ? traceEvents.filter((event) => event.nodeId === selectedNode.id).slice(-24)
     : [];
 
-  const isChat = sidebarTab === "chat";
+  const isChat = contentTab === "chat" && sidebarTab === "toolbox";
 
   return (
     <aside className={`vsc-sidebar${isChat ? " vsc-sidebar--chat" : ""}`} aria-label="Sidebar">
@@ -602,147 +616,78 @@ export function Sidebar({
 
       {sidebarTab === "toolbox" && workspaceTab === "canvas" && (
         <>
-          <div className="vsc-sidebar-title">Toolbox</div>
-
-          {/* Run trace panel */}
-          {(chainRunning || hasChainActivity || traceEvents.length > 0) && (
-            <>
-              <div className="vsc-section-hdr">Run Trace</div>
-              <div className="vsc-run-summary">
-                <span>{chainRunning ? "Running" : activeRunId ? "Active" : "Last run"}</span>
-                <span>{traceEvents.length} events</span>
-              </div>
-              <TraceTimeline
-                events={traceEvents}
-                nodes={chainNodes}
-                emptyLabel="Run the canvas to see model and tool activity."
-              />
-              <div className="vsc-divider" />
-              <div className="vsc-section-hdr">Node Status</div>
-              <div className="vsc-chain-progress">
-                {sortedChainNodes.map((node) => {
-                  const s = (node.status ?? "idle") as NodeStatus;
-                  const nt = nodeTypes.find((t) => t.id === node.typeId);
-                  return (
-                    <div key={node.id} className={`vsc-chain-row vsc-chain-row--${s}`}>
-                      <span className="vsc-chain-status-icon" style={{ color: STATUS_COLOR[s] }}>
-                        {STATUS_ICON[s]}
-                      </span>
-                      <span className="vsc-chain-node-dot" style={{ background: nt?.accent ?? "#a0a0a0" }} />
-                      <span className="vsc-chain-node-label">{node.label || nt?.label || node.typeId}</span>
-                      {s === "running" && <span className="vsc-chain-running-badge">running</span>}
-                      {s === "done" && node.output && (
-                        <span className="vsc-chain-done-badge">done</span>
-                      )}
-                      {s === "error" && <span className="vsc-chain-error-badge">error</span>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="vsc-divider" />
-            </>
-          )}
-
-          {/* Mode buttons */}
-          <div className="vsc-section-hdr">Modes</div>
-          <div className="vsc-list">
+          {/* Tab strip */}
+          <div className="sidebar-tabs" role="tablist" aria-label="Sidebar content">
             <button
               type="button"
-              className={`vsc-list-item${mode === "select" ? " active" : ""}`}
-              onClick={() => onSetMode("select")}
+              role="tab"
+              aria-selected={contentTab === "config"}
+              className={`sidebar-tab${contentTab === "config" ? " active" : ""}`}
+              onClick={() => setContentTab("config")}
             >
-              <span className="vsc-list-icon" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M1.5 1L7 13.5l2.2-5.3L14.5 6z"/>
-                </svg>
-              </span>
-              <span className="vsc-list-label">Pointer</span>
-              <kbd className="vsc-kbd">V</kbd>
+              Config
             </button>
             <button
               type="button"
-              className={`vsc-list-item${mode === "connect" ? " active" : ""}`}
-              onClick={() => onSetMode("connect")}
+              role="tab"
+              aria-selected={contentTab === "trace"}
+              className={`sidebar-tab${contentTab === "trace" ? " active" : ""}`}
+              onClick={() => setContentTab("trace")}
             >
-              <span className="vsc-list-icon" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                  <circle cx="3.5" cy="8" r="2.2"/>
-                  <circle cx="12.5" cy="8" r="2.2"/>
-                  <line x1="5.7" y1="8" x2="10.3" y2="8"/>
-                  <polyline points="9,6.6 10.6,8 9,9.4" strokeLinejoin="round"/>
-                </svg>
-              </span>
-              <span className="vsc-list-label">Connect</span>
-              <kbd className="vsc-kbd">C</kbd>
+              Trace
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={contentTab === "chat"}
+              className={`sidebar-tab${contentTab === "chat" ? " active" : ""}`}
+              onClick={() => setContentTab("chat")}
+            >
+              Chat
             </button>
           </div>
 
-          {/* Chain steps */}
-          <div className="vsc-section-hdr">Chain Steps</div>
-          <div className="vsc-list">
-            {chainSteps.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
-                onClick={() => onSetMode("place", t.id)}
-              >
-                <span
-                  className="vsc-glyph shape-rect"
-                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
-                  aria-hidden="true"
-                />
-                <span className="vsc-list-label">{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Control nodes */}
-          <div className="vsc-section-hdr">Control</div>
-          <div className="vsc-list">
-            {controlNodes.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
-                onClick={() => onSetMode("place", t.id)}
-              >
-                <span
-                  className="vsc-glyph shape-rect"
-                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
-                  aria-hidden="true"
-                />
-                <span className="vsc-list-label">{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Utility nodes */}
-          <div className="vsc-section-hdr">Utilities</div>
-          <div className="vsc-list">
-            {utilityNodes.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
-                onClick={() => onSetMode("place", t.id)}
-              >
-                <span
-                  className="vsc-glyph shape-rect"
-                  style={{ borderColor: t.accent, background: `${t.accent}22` }}
-                  aria-hidden="true"
-                />
-                <span className="vsc-list-label">{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Context nodes */}
-          {contextNodes.length > 0 && (
+          {/* Config tab */}
+          {contentTab === "config" && (
             <>
-              <div className="vsc-section-hdr">Context</div>
+              {/* Mode buttons */}
+              <div className="vsc-section-hdr">Modes</div>
               <div className="vsc-list">
-                {contextNodes.map((t) => (
+                <button
+                  type="button"
+                  className={`vsc-list-item${mode === "select" ? " active" : ""}`}
+                  onClick={() => onSetMode("select")}
+                >
+                  <span className="vsc-list-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M1.5 1L7 13.5l2.2-5.3L14.5 6z"/>
+                    </svg>
+                  </span>
+                  <span className="vsc-list-label">Pointer</span>
+                  <kbd className="vsc-kbd">V</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={`vsc-list-item${mode === "connect" ? " active" : ""}`}
+                  onClick={() => onSetMode("connect")}
+                >
+                  <span className="vsc-list-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                      <circle cx="3.5" cy="8" r="2.2"/>
+                      <circle cx="12.5" cy="8" r="2.2"/>
+                      <line x1="5.7" y1="8" x2="10.3" y2="8"/>
+                      <polyline points="9,6.6 10.6,8 9,9.4" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                  <span className="vsc-list-label">Connect</span>
+                  <kbd className="vsc-kbd">C</kbd>
+                </button>
+              </div>
+
+              {/* Chain steps */}
+              <div className="vsc-section-hdr">Chain Steps</div>
+              <div className="vsc-list">
+                {chainSteps.map((t) => (
                   <button
                     key={t.id}
                     type="button"
@@ -758,77 +703,202 @@ export function Sidebar({
                   </button>
                 ))}
               </div>
+
+              {/* Control nodes */}
+              <div className="vsc-section-hdr">Control</div>
+              <div className="vsc-list">
+                {controlNodes.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                    onClick={() => onSetMode("place", t.id)}
+                  >
+                    <span
+                      className="vsc-glyph shape-rect"
+                      style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                      aria-hidden="true"
+                    />
+                    <span className="vsc-list-label">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Utility nodes */}
+              <div className="vsc-section-hdr">Utilities</div>
+              <div className="vsc-list">
+                {utilityNodes.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                    onClick={() => onSetMode("place", t.id)}
+                  >
+                    <span
+                      className="vsc-glyph shape-rect"
+                      style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                      aria-hidden="true"
+                    />
+                    <span className="vsc-list-label">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Context nodes */}
+              {contextNodes.length > 0 && (
+                <>
+                  <div className="vsc-section-hdr">Context</div>
+                  <div className="vsc-list">
+                    {contextNodes.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`vsc-list-item${mode === "place" && placementTypeId === t.id ? " active" : ""}`}
+                        onClick={() => onSetMode("place", t.id)}
+                      >
+                        <span
+                          className="vsc-glyph shape-rect"
+                          style={{ borderColor: t.accent, background: `${t.accent}22` }}
+                          aria-hidden="true"
+                        />
+                        <span className="vsc-list-label">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Properties panel when node selected */}
+              {selectedNode && selectedNodeType && (
+                <>
+                  <div className="vsc-divider" />
+                  <div className="vsc-section-hdr">Properties</div>
+
+                  {/* Label */}
+                  <div className="vsc-props">
+                    <div className="vsc-prop-row">
+                      <span className="vsc-prop-key">Label</span>
+                      <input
+                        className="vsc-prop-input"
+                        type="text"
+                        value={selectedLabelDraft}
+                        onChange={(e) => onLabelChange(e.target.value.slice(0, 80))}
+                      />
+                    </div>
+                    <div className="vsc-prop-row">
+                      <span className="vsc-prop-key">Type</span>
+                      <span className="vsc-prop-val" style={{ color: selectedNodeType.accent }}>
+                        {selectedTypeName}
+                      </span>
+                    </div>
+                    <div className="vsc-prop-row">
+                      <span className="vsc-prop-key">Status</span>
+                      <span className="vsc-prop-val">{selectedNode.status ?? "idle"}</span>
+                    </div>
+                  </div>
+
+                  {/* Type-specific config */}
+                  <div className="vsc-cfg-panel">
+                    {selectedNodeType.id === "agent" && (
+                      <AgentConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.category === "start" && (
+                      <StartConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.id === "branch" && (
+                      <BranchConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.id === "file-write" && (
+                      <FileWriteConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.id === "shell-exec" && (
+                      <ShellExecConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.id === "memory" && (
+                      <MemoryConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.category === "context" && (
+                      <ContextConfig node={selectedNode} onConfigChange={handleConfigChange} />
+                    )}
+                    {selectedNodeType.category === "review" && selectedNode.status === "paused" && (
+                      <div className="vsc-review-panel">
+                        <p className="vsc-review-msg">⏸ Chain paused — awaiting your review</p>
+                        <div className="vsc-review-actions">
+                          <button type="button" className="vsc-review-approve" onClick={onApprove}>✓ Approve</button>
+                          <button type="button" className="vsc-review-reject" onClick={onReject}>✕ Reject</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Output preview */}
+                  {selectedNode.output && (
+                    <>
+                      <div className="vsc-divider" />
+                      <div className="vsc-section-hdr">Output</div>
+                      <div className="vsc-output-preview">
+                        <pre className="vsc-output-text">{selectedNode.output}</pre>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Delete */}
+                  <div className="vsc-divider" />
+                  <button type="button" className="vsc-prop-delete" onClick={onDeleteNode}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                      <polyline points="3,4 13,4"/>
+                      <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/>
+                      <path d="M4 4l1 9h6l1-9"/>
+                    </svg>
+                    Delete node
+                  </button>
+                </>
+              )}
             </>
           )}
 
-          {/* Properties panel when node selected */}
-          {selectedNode && selectedNodeType && (
+          {/* Trace tab */}
+          {contentTab === "trace" && (
             <>
-              <div className="vsc-divider" />
-              <div className="vsc-section-hdr">Properties</div>
-
-              {/* Label */}
-              <div className="vsc-props">
-                <div className="vsc-prop-row">
-                  <span className="vsc-prop-key">Label</span>
-                  <input
-                    className="vsc-prop-input"
-                    type="text"
-                    value={selectedLabelDraft}
-                    onChange={(e) => onLabelChange(e.target.value.slice(0, 80))}
-                  />
-                </div>
-                <div className="vsc-prop-row">
-                  <span className="vsc-prop-key">Type</span>
-                  <span className="vsc-prop-val" style={{ color: selectedNodeType.accent }}>
-                    {selectedTypeName}
-                  </span>
-                </div>
-                <div className="vsc-prop-row">
-                  <span className="vsc-prop-key">Status</span>
-                  <span className="vsc-prop-val">{selectedNode.status ?? "idle"}</span>
-                </div>
+              <div className="vsc-run-summary">
+                <span>{chainRunning ? "Running" : activeRunId ? "Active" : traceEvents.length > 0 ? "Last run" : "No runs yet"}</span>
+                <span>{traceEvents.length} events</span>
               </div>
-
-              {/* Type-specific config */}
-              <div className="vsc-cfg-panel">
-                {selectedNodeType.id === "agent" && (
-                  <AgentConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.category === "start" && (
-                  <StartConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.id === "branch" && (
-                  <BranchConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.id === "file-write" && (
-                  <FileWriteConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.id === "shell-exec" && (
-                  <ShellExecConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.id === "memory" && (
-                  <MemoryConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.category === "context" && (
-                  <ContextConfig node={selectedNode} onConfigChange={handleConfigChange} />
-                )}
-                {selectedNodeType.category === "review" && selectedNode.status === "paused" && (
-                  <div className="vsc-review-panel">
-                    <p className="vsc-review-msg">⏸ Chain paused — awaiting your review</p>
-                    <div className="vsc-review-actions">
-                      <button type="button" className="vsc-review-approve" onClick={onApprove}>✓ Approve</button>
-                      <button type="button" className="vsc-review-reject" onClick={onReject}>✕ Reject</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Output preview */}
-              {selectedTraceEvents.length > 0 && (
+              <TraceTimeline
+                events={traceEvents}
+                nodes={chainNodes}
+                emptyLabel="Run the canvas to see model and tool activity."
+              />
+              {(chainRunning || hasChainActivity) && (
                 <>
                   <div className="vsc-divider" />
-                  <div className="vsc-section-hdr">Selected Trace</div>
+                  <div className="vsc-section-hdr">Node Status</div>
+                  <div className="vsc-chain-progress">
+                    {sortedChainNodes.map((node) => {
+                      const s = (node.status ?? "idle") as NodeStatus;
+                      const nt = nodeTypes.find((t) => t.id === node.typeId);
+                      return (
+                        <div key={node.id} className={`vsc-chain-row vsc-chain-row--${s}`}>
+                          <span className="vsc-chain-status-icon" style={{ color: STATUS_COLOR[s] }}>
+                            {STATUS_ICON[s]}
+                          </span>
+                          <span className="vsc-chain-node-dot" style={{ background: nt?.accent ?? "#a0a0a0" }} />
+                          <span className="vsc-chain-node-label">{node.label || nt?.label || node.typeId}</span>
+                          {s === "running" && <span className="vsc-chain-running-badge">running</span>}
+                          {s === "done" && node.output && (
+                            <span className="vsc-chain-done-badge">done</span>
+                          )}
+                          {s === "error" && <span className="vsc-chain-error-badge">error</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+              {selectedNode && selectedTraceEvents.length > 0 && (
+                <>
+                  <div className="vsc-divider" />
+                  <div className="vsc-section-hdr">Selected Node Trace</div>
                   <TraceTimeline
                     events={selectedTraceEvents}
                     nodes={chainNodes}
@@ -836,36 +906,23 @@ export function Sidebar({
                   />
                 </>
               )}
-
-              {/* Output preview */}
-              {selectedNode.output && (
-                <>
-                  <div className="vsc-divider" />
-                  <div className="vsc-section-hdr">Output</div>
-                  <div className="vsc-output-preview">
-                    <pre className="vsc-output-text">{selectedNode.output}</pre>
-                  </div>
-                </>
-              )}
-
-              {/* Delete */}
-              <div className="vsc-divider" />
-              <button type="button" className="vsc-prop-delete" onClick={onDeleteNode}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-                  <polyline points="3,4 13,4"/>
-                  <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/>
-                  <path d="M4 4l1 9h6l1-9"/>
-                </svg>
-                Delete node
-              </button>
             </>
+          )}
+
+          {/* Chat tab */}
+          {contentTab === "chat" && (
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+              <ChatPanel socketRef={socketRef} nodeTypes={nodeTypes} workspaceTab={workspaceTab} />
+            </div>
           )}
         </>
       )}
 
-      <div style={{ display: sidebarTab === "chat" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
-        <ChatPanel socketRef={socketRef} nodeTypes={nodeTypes} workspaceTab={workspaceTab} />
-      </div>
+      {sidebarTab === "chat" && (
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <ChatPanel socketRef={socketRef} nodeTypes={nodeTypes} workspaceTab={workspaceTab} />
+        </div>
+      )}
     </aside>
   );
 }

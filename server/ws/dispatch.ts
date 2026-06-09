@@ -13,6 +13,7 @@ import {
   handlePlanEdgeCreate,
   handlePlanEdgeDelete,
 } from "./handlers/plan.js";
+import { handleSkillList, handleSkillUpdate } from "./handlers/skill.js";
 import { users } from "../state/store.js";
 
 export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): void {
@@ -52,6 +53,8 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "review:reject":      return handleReviewReject(ws, userId, message);
     case "chat:message":       void handleChatMessage(ws, userId, message); return;
     case "chat:apply":         void handleChatApply(ws, userId, message); return;
+    case "skill:list":         void handleSkillList(ws); return;
+    case "skill:update":       void handleSkillUpdate(ws, message); return;
     default: debug("unknown-message", { userId, type: message.type });
   }
 }
