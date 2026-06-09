@@ -4,7 +4,7 @@ import { SDLC_NODE_TYPES } from "../../../shared/nodeRegistry.js";
 import type { EdgeV2, NodeV2 } from "../../../shared/types.js";
 import { edges, nodes } from "../state/store.js";
 import { updateNode } from "../state/operations.js";
-import { callOpenAI } from "./provider.js";
+import { callOpenAI, callOpenAIWithWebSearch } from "./provider.js";
 import { loadSkill } from "./skillLoader.js";
 
 export interface RunContext {
@@ -151,7 +151,9 @@ export async function runChain(ctx: RunContext): Promise<void> {
           throw new Error(`Node "${node.title}" has no task prompt or input`);
         }
 
-        output = await callOpenAI({ systemPrompt: skill, userMessage });
+        output = await (node.type === "investigate"
+          ? callOpenAIWithWebSearch({ systemPrompt: skill, userMessage })
+          : callOpenAI({ systemPrompt: skill, userMessage }));
       } else {
         output = flowInput;
       }

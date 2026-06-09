@@ -30,3 +30,19 @@ export async function callOpenAI(params: CallOpenAIParams): Promise<string> {
 
   return response.choices[0]?.message?.content ?? "";
 }
+
+// Uses the Responses API with built-in web_search_preview — no extra API key needed.
+// OpenAI handles the search loop automatically and returns the final grounded response.
+export async function callOpenAIWithWebSearch(params: CallOpenAIParams): Promise<string> {
+  const model = process.env.OPENAI_MODEL ?? "gpt-4o";
+  const client = getClient();
+
+  const response = await client.responses.create({
+    model,
+    instructions: params.systemPrompt,
+    input: params.userMessage,
+    tools: [{ type: "web_search_preview" }],
+  });
+
+  return response.output_text;
+}
