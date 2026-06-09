@@ -1,5 +1,5 @@
 import path from "node:path";
-import { callOpenAI, callOpenAIToolRound, type OpenAIMessage } from "./providers/openai.js";
+import { callOpenAI, callOpenAIToolRound, callOpenAIResponses, type OpenAIMessage } from "./providers/openai.js";
 import { callAnthropic } from "./providers/anthropic.js";
 import { callGoogle } from "./providers/google.js";
 import {
@@ -12,7 +12,7 @@ import {
   type AgentToolName,
 } from "./agentTools.js";
 import type { NodeRunTraceKind } from "../../src/types/index.js";
-import { NODE_SKILLS } from "./skills.js";
+import { getSkillPrompt } from "./skillLoader.js";
 
 export type NodeStatus = "idle" | "running" | "done" | "error" | "paused";
 
@@ -127,6 +127,25 @@ async function callAIWithTools(
   if (allowedTools.length === 0 || maxToolCalls <= 0) {
     emitTrace({ kind: "node:model", level: "info", message: `Model call: ${provider}/${model}` });
     return callAI(provider, model, systemPrompt, userMessage);
+  }
+
+  // When web_search is requested on OpenAI, use the Responses API with the
+  // built-in web_search_preview tool. It handles the search/fetch loop
+  // internally and returns a final grounded answer — no external API key needed.
+  if (allowedTools.includes("web_search") && provider === "openai") {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+    const maxTokens = Number(process.env.OPENAI_MAX_COMPLETION_TOKENS ?? 8192);
+    emitTrace({ kind: "node:model", level: "info", message: `Responses API call (web_search_preview): openai/${model}` });
+    const result = await callOpenAIResponses({
+      model,
+      systemPrompt,
+      userMessage,
+      apiKey,
+      maxTokens: Number.isFinite(maxTokens) ? maxTokens : undefined,
+    });
+    emitTrace({ kind: "node:output", level: "info", message: "Final output", data: { preview: result.slice(0, 240) } });
+    return result;
   }
 
   if (provider === "openai") {
@@ -419,7 +438,7 @@ function buildSystemPrompt(role: string, taskDescription: string, contextNotes?:
 
   // The editable node prompt is task input. System instructions stay internal
   // so each role can behave like a reusable skill.
-  const primary = NODE_SKILLS[role] || "";
+  const primary = getSkillPrompt(role);
   if (primary) parts.push(primary);
 
   if (taskDescription) parts.push(`## Task Goal\n${taskDescription}`);
