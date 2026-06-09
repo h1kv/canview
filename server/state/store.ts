@@ -33,6 +33,15 @@ export interface ServerEdge {
   createdAt: number;
 }
 
+export interface ApprovalResolver {
+  resolve: (approved: boolean) => void;
+  nodeId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+export const approvalResolvers: Map<string, ApprovalResolver> = new Map();
+
 export const clients = new Map<WebSocket, string>();
 export const users = new Map<string, ServerUser>();
 export const nodes = new Map<string, ServerNode>();

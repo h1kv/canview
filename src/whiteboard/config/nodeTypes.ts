@@ -80,6 +80,7 @@ export const NODE_TYPES: NodeTypeConfig[] = [
     ],
     defaultConfig: {
       condition: "",
+      conditionType: "nl",
       provider: "openai",
       model: "gpt-5.5",
     },

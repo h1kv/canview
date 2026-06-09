@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { NODE_TYPES } from "../config/nodeTypes.js";
 import type { BoardNode, BoardEdge, BoardUser, NodeTypeConfig, NodeStatus, PlanNode, PlanEdge, NodeRunTraceEvent } from "../../types/index.js";
+
+export interface PendingApproval {
+  nodeId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
 
 function getSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -30,6 +36,9 @@ export interface UseSocketResult {
   chainRunning: boolean;
   activeRunId: string | null;
   sendWs: (msg: unknown) => void;
+  pendingApprovals: Map<string, PendingApproval>;
+  approveToolCall: (approvalId: string) => void;
+  denyToolCall: (approvalId: string) => void;
 }
 
 export function useSocket(username: string): UseSocketResult {
@@ -50,6 +59,7 @@ export function useSocket(username: string): UseSocketResult {
   const [traceVersion, setTraceVersion] = useState<number>(0);
   const [chainRunning, setChainRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<Map<string, PendingApproval>>(new Map());
 
   useEffect(() => {
     const socket = new WebSocket(getSocketUrl());
@@ -253,6 +263,24 @@ export function useSocket(username: string): UseSocketResult {
         return;
       }
 
+      if (message.type === "tool:approval:request") {
+        const approvalId = message.approvalId as string;
+        const nodeId = message.nodeId as string;
+        const toolName = message.toolName as string;
+        const args = (message.args ?? {}) as Record<string, unknown>;
+        setPendingApprovals((prev) => {
+          const next = new Map(prev);
+          next.set(approvalId, { nodeId, toolName, args });
+          return next;
+        });
+        return;
+      }
+
+      // Clear pending approvals when chain ends
+      if (message.type === "chain:complete" || message.type === "chain:stopped" || message.type === "chain:error") {
+        setPendingApprovals(new Map());
+      }
+
       // Chat messages — forwarded via CustomEvent so ChatPanel can listen
       // without needing its own socket reference timing dependency
       if (message.type === "chat:response" || message.type === "chat:error") {
@@ -269,6 +297,24 @@ export function useSocket(username: string): UseSocketResult {
       socketRef.current = null;
     };
   }, [username]);
+
+  const approveToolCall = useCallback((approvalId: string) => {
+    sendJson(socketRef, { type: "tool:approval:approve", approvalId });
+    setPendingApprovals((prev) => {
+      const next = new Map(prev);
+      next.delete(approvalId);
+      return next;
+    });
+  }, [socketRef]);
+
+  const denyToolCall = useCallback((approvalId: string) => {
+    sendJson(socketRef, { type: "tool:approval:deny", approvalId });
+    setPendingApprovals((prev) => {
+      const next = new Map(prev);
+      next.delete(approvalId);
+      return next;
+    });
+  }, [socketRef]);
 
   return {
     status,
@@ -287,5 +333,8 @@ export function useSocket(username: string): UseSocketResult {
     chainRunning,
     activeRunId,
     sendWs: (msg: unknown) => sendJson(socketRef, msg),
+    pendingApprovals,
+    approveToolCall,
+    denyToolCall,
   };
 }

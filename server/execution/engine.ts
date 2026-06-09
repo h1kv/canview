@@ -10,6 +10,7 @@ import {
   resolveWorkspacePath,
   webSearch,
   type AgentToolName,
+  type ApprovalCallback,
 } from "./agentTools.js";
 import type { NodeRunTraceKind } from "../../src/types/index.js";
 import { NODE_SKILLS } from "./skills.js";
@@ -44,6 +45,7 @@ export interface ChainCallbacks {
   onNodeStatus: (nodeId: string, status: NodeStatus, output?: string) => void;
   onNodeTrace?: (nodeId: string, event: TraceEventInput) => void;
   waitForReview: (nodeId: string) => Promise<ReviewDecision>;
+  requestToolApproval?: ApprovalCallback;
 }
 
 export interface TraceEventInput {
@@ -122,7 +124,8 @@ async function callAIWithTools(
   userMessage: string,
   allowedTools: AgentToolName[],
   maxToolCalls: number,
-  emitTrace: (event: TraceEventInput) => void
+  emitTrace: (event: TraceEventInput) => void,
+  approvalCallback?: ApprovalCallback
 ): Promise<string> {
   if (allowedTools.length === 0 || maxToolCalls <= 0) {
     emitTrace({ kind: "node:model", level: "info", message: `Model call: ${provider}/${model}` });
@@ -130,7 +133,7 @@ async function callAIWithTools(
   }
 
   if (provider === "openai") {
-    return callOpenAIWithNativeTools(model, systemPrompt, userMessage, allowedTools, maxToolCalls, emitTrace);
+    return callOpenAIWithNativeTools(model, systemPrompt, userMessage, allowedTools, maxToolCalls, emitTrace, approvalCallback);
   }
 
   const toolSystemPrompt = `${systemPrompt}\n\n---\n\n${buildAgentToolInstructions(allowedTools)}`;
@@ -170,7 +173,7 @@ async function callAIWithTools(
       data: { toolName, args: parsed.toolCall.args ?? {} },
     });
     try {
-      toolResult = await executeAgentTool(toolName, parsed.toolCall.args ?? {});
+      toolResult = await executeAgentTool(toolName, parsed.toolCall.args ?? {}, approvalCallback);
       emitTrace({
         kind: "node:tool-result",
         level: "info",
@@ -208,7 +211,8 @@ async function callOpenAIWithNativeTools(
   userMessage: string,
   allowedTools: AgentToolName[],
   maxToolCalls: number,
-  emitTrace: (event: TraceEventInput) => void
+  emitTrace: (event: TraceEventInput) => void,
+  approvalCallback?: ApprovalCallback
 ): Promise<string> {
   const toolInstructions = `You may use the enabled tools to complete this node.
 
@@ -258,7 +262,7 @@ Research rules:
 
       emitTrace({ kind: "node:tool-call", level: "info", message: `Calling ${toolName}`, data: { toolName, args: call.args } });
       try {
-        const result = await executeAgentTool(toolName, call.args);
+        const result = await executeAgentTool(toolName, call.args, approvalCallback);
         emitTrace({
           kind: "node:tool-result",
           level: "info",
@@ -461,8 +465,6 @@ export async function runChain(
   if (!startNode) throw new Error("No Start node found in chain");
 
   const taskDescription = (startNode.config.taskDescription as string) || "";
-  const defaultProvider = firstNonBlank(startNode.config.defaultProvider, "openai");
-  const defaultModel = firstNonBlank(startNode.config.defaultModel, "gpt-5.5");
 
   // --- Context node pre-pass: resolve all context nodes before chain runs ---
   const contextNodes = Array.from(nodes.values()).filter((n) => n.typeId === "context");
@@ -550,8 +552,9 @@ export async function runChain(
 
       } else if (AI_STEP_TYPES.has(node.typeId)) {
         // Agent step — role selects the internal skill; taskPrompt is sent as user/task input.
-        const provider = firstNonBlank(node.config.provider, defaultProvider);
-        const model = firstNonBlank(node.config.model, defaultModel);
+        // Each agent node uses its own model/provider; hardcoded defaults if not set.
+        const provider = firstNonBlank(node.config.provider, "openai");
+        const model = firstNonBlank(node.config.model, "gpt-5.5");
         const role = (node.config.role as string) || "investigate";
         const taskPrompt = firstNonBlank(node.config.taskPrompt, node.config.systemPrompt);
         const allowedTools = normalizeAllowedAgentTools(node.config.tools);
@@ -576,7 +579,8 @@ export async function runChain(
           userMessage,
           allowedTools,
           maxToolCalls,
-          emitTrace
+          emitTrace,
+          callbacks.requestToolApproval
         );
 
       } else if (node.typeId === "review") {
@@ -599,14 +603,36 @@ export async function runChain(
         output = inputText;
 
       } else if (node.typeId === "branch") {
-        // AI evaluates a natural-language condition
+        const conditionType = (node.config.conditionType as string) || "nl";
         const condition = (node.config.condition as string) || "false";
-        const provider = firstNonBlank(node.config.provider, defaultProvider);
-        const model = firstNonBlank(node.config.model, defaultModel);
-        const evalSystem = `You are a condition evaluator. Given the output of a previous step and a condition to check, respond with ONLY the word "true" or "false" (lowercase, no punctuation, nothing else).`;
-        const evalUser = `Previous output:\n${inputText}\n\nCondition to evaluate: ${condition}`;
-        const evalResult = await callAI(provider, model, evalSystem, evalUser);
-        const boolResult = evalResult.trim().toLowerCase().startsWith("true");
+
+        let boolResult = false;
+        if (conditionType === "expr") {
+          // Expression mode: evaluate as a JS expression with safe context
+          const expr = condition;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-implied-eval
+            boolResult = new Function("output", "length", `return !!(${expr})`)(inputText, inputText.length) as boolean;
+          } catch (exprErr) {
+            const exprErrMsg = exprErr instanceof Error ? exprErr.message : String(exprErr);
+            emitTrace({
+              kind: "node:error",
+              level: "error",
+              message: `Expression eval failed: ${exprErrMsg}`,
+              data: { expr, error: exprErrMsg },
+            });
+            boolResult = false;
+          }
+        } else {
+          // Natural language mode: AI evaluates the condition
+          const provider = firstNonBlank(node.config.provider, "openai");
+          const model = firstNonBlank(node.config.model, "gpt-5.5");
+          const evalSystem = `You are a condition evaluator. Given the output of a previous step and a condition to check, respond with ONLY the word "true" or "false" (lowercase, no punctuation, nothing else).`;
+          const evalUser = `Previous output:\n${inputText}\n\nCondition to evaluate: ${condition}`;
+          const evalResult = await callAI(provider, model, evalSystem, evalUser);
+          boolResult = evalResult.trim().toLowerCase().startsWith("true");
+        }
+
         nextPort = boolResult ? "true" : "false";
         output = `Condition "${condition}" → ${boolResult ? "true ✓" : "false ✗"}`;
 

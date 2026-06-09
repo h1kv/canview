@@ -4,7 +4,7 @@ import { handleJoin } from "./handlers/join.js";
 import { handleNodeCreate, handleNodeUpdate, handleNodeDelete, handleNodeConfigUpdate } from "./handlers/node.js";
 import { handleEdgeCreate, handleEdgeDelete } from "./handlers/edge.js";
 import { handleCursorUpdate } from "./handlers/cursor.js";
-import { handleChainRun, handleChainStop, handleReviewApprove, handleReviewReject } from "./handlers/chain.js";
+import { handleChainRun, handleChainStop, handleReviewApprove, handleReviewReject, handleToolApprovalApprove, handleToolApprovalDeny } from "./handlers/chain.js";
 import { handleChatMessage, handleChatApply } from "./handlers/chat.js";
 import {
   handlePlanNodeCreate,
@@ -48,8 +48,10 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "plan:edge:delete":   return handlePlanEdgeDelete(ws, userId, message);
     case "chain:run":          return handleChainRun(ws, userId);
     case "chain:stop":         return handleChainStop(ws, userId);
-    case "review:approve":     return handleReviewApprove(ws, userId, message);
-    case "review:reject":      return handleReviewReject(ws, userId, message);
+    case "review:approve":           return handleReviewApprove(ws, userId, message);
+    case "review:reject":            return handleReviewReject(ws, userId, message);
+    case "tool:approval:approve":    return handleToolApprovalApprove(ws, userId, message);
+    case "tool:approval:deny":       return handleToolApprovalDeny(ws, userId, message);
     case "chat:message":       void handleChatMessage(ws, userId, message); return;
     case "chat:apply":         void handleChatApply(ws, userId, message); return;
     default: debug("unknown-message", { userId, type: message.type });

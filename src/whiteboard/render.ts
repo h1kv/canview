@@ -24,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
   done: "#16825d",
   error: "#e02020",
   paused: "#e65100",
+  "approval-pending": "#f59e0b",
 };
 
 function drawDots(ctx: CanvasRenderingContext2D, width: number, height: number, view: View): void {
@@ -113,7 +114,8 @@ function drawNode(
   selected: boolean,
   pendingConnection: boolean,
   hoverPortId: string | null,
-  lastTrace: NodeRunTraceEvent | undefined
+  lastTrace: NodeRunTraceEvent | undefined,
+  approvalPending: boolean
 ): void {
   const { x, y, width, height } = node;
   let accent = nodeType?.accent ?? "#8b8b8b";
@@ -125,11 +127,17 @@ function drawNode(
 
   ctx.save();
 
+  const APPROVAL_COLOR = "#f59e0b";
+
   // Drop shadow / pulse glow
   const pulse = (Math.sin(pulsePhase) + 1) / 2;
   if (status === "running") {
     ctx.shadowColor = accent;
     ctx.shadowBlur = 10 + pulse * 22;
+    ctx.shadowOffsetY = 0;
+  } else if (approvalPending) {
+    ctx.shadowColor = APPROVAL_COLOR;
+    ctx.shadowBlur = 8 + pulse * 18;
     ctx.shadowOffsetY = 0;
   } else {
     ctx.shadowColor = selected ? `${accent}44` : "rgba(0,0,0,0.08)";
@@ -150,7 +158,11 @@ function drawNode(
   // Card border
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, 4);
-  if (pendingConnection) {
+  if (approvalPending) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = APPROVAL_COLOR;
+    ctx.lineWidth = 2.5;
+  } else if (pendingConnection) {
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = "#0078d4";
     ctx.lineWidth = 2;
@@ -188,7 +200,8 @@ function drawNode(
   ctx.letterSpacing = "0em";
 
   // Status dot (right of header)
-  const dotColor = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
+  const effectiveStatusKey = approvalPending ? "approval-pending" : status;
+  const dotColor = STATUS_COLORS[effectiveStatusKey] ?? STATUS_COLORS.idle;
   const dotX = x + width - 13;
   const dotY = y + HEADER_H / 2;
   ctx.beginPath();
@@ -199,6 +212,24 @@ function drawNode(
   ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
   ctx.fillStyle = dotColor;
   ctx.fill();
+
+  // Approval-pending badge
+  if (approvalPending) {
+    const badgeLabel = "approve?";
+    ctx.font = `bold 9px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    const bw = ctx.measureText(badgeLabel).width + 10;
+    const bh = 14;
+    const bx = x + width / 2 - bw / 2;
+    const by = y + height - bh - 4;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 3);
+    ctx.fillStyle = APPROVAL_COLOR;
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(badgeLabel, x + width / 2, by + bh / 2 + 0.5);
+  }
 
   // Body: preview text
   const taskPrompt = (node.config?.taskPrompt as string) || (node.config?.systemPrompt as string) || "";
@@ -561,7 +592,8 @@ export function renderBoard(
   selfId: string | null,
   graphState: GraphState,
   interactionState: InteractionState,
-  traceEvents: NodeRunTraceEvent[] = []
+  traceEvents: NodeRunTraceEvent[] = [],
+  pendingApprovalNodeIds: Set<string> = new Set()
 ): void {
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
@@ -597,7 +629,8 @@ export function renderBoard(
       interactionState?.selectedNodeId === node.id,
       interactionState?.pendingConnectionSourceId === node.id,
       isHoverNode ? (interactionState?.hoverPortInfo?.portId ?? null) : null,
-      lastTraceByNode.get(node.id)
+      lastTraceByNode.get(node.id),
+      pendingApprovalNodeIds.has(node.id)
     );
   }
 
