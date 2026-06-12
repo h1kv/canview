@@ -173,6 +173,19 @@ export function ChatPanel({
   }
 
   function handleApply(ops: ChatGraphOperation[]) {
+    // Clear preview and OpCard immediately so canvas doesn't briefly show
+    // both real nodes (from incoming node:created events) and ghost preview nodes
+    const idx = pendingOpsIndexRef.current;
+    if (idx !== null) {
+      setMessages((prev) => {
+        if (idx >= prev.length) return prev;
+        const next = [...prev];
+        next[idx] = { ...next[idx], pendingOps: undefined };
+        return next;
+      });
+      pendingOpsIndexRef.current = null;
+      onPendingOpsChange(null);
+    }
     sendJson(socketRef.current, { type: "chat:apply", operations: ops });
   }
 

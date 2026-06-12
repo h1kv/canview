@@ -5,6 +5,9 @@ import type { UserConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: "0.0.0.0"
+    host: "0.0.0.0",
+    watch: {
+      ignored: ["**/workspace/**"]
+    }
   }
 } satisfies UserConfig);

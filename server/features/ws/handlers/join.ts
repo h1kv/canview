@@ -1,6 +1,8 @@
 import type { WebSocket } from "ws";
 import {
+  activateWorkspace,
   broadcast,
+  getActiveWorkspaceName,
   planExcalidrawData,
   send,
   serializeChatMessages,
@@ -18,9 +20,12 @@ export function handleJoin(ws: WebSocket, userId: string, message: Record<string
   const user = users.get(userId);
   if (!user) return;
   user.name = safeText(message.name, fallbackName);
+  const workspaceName = typeof message.workspace === "string" ? message.workspace : "default";
+  activateWorkspace(workspaceName);
   send(ws, {
     type: "init",
     selfId: userId,
+    workspace: getActiveWorkspaceName(),
     users: serializeUsers(),
     nodes: serializeNodes(),
     edges: serializeEdges(),

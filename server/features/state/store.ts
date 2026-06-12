@@ -28,7 +28,8 @@ const DEFAULT_PLAN_ELEMENTS = "[]";
 const MAX_CHAT_TRANSCRIPT_MESSAGES = 80;
 const WORKSPACE_STATE_FILE_NAME = "workspace-state.json";
 let workspaceStateFileOverride: string | null = null;
-let persistenceSuspended = true; // TEMP: persistence disabled
+let persistenceSuspended = true;
+let activeWorkspaceName = "";
 
 export const userColors = ["#2d2d2d", "#7c3f3f", "#4f6b45", "#7a612e", "#6a4f76", "#7a4f5b"];
 export let colorIndex = 0;
@@ -297,6 +298,21 @@ export function appendChatMessage(role: ChatTranscriptMessage["role"], content: 
   return message;
 }
 
+export function getActiveWorkspaceName(): string {
+  return activeWorkspaceName;
+}
+
+export function activateWorkspace(name: string): void {
+  if (activeWorkspaceName) return; // already active — first joiner wins
+  const safe = name.trim().replace(/[^a-zA-Z0-9_\-]/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "default";
+  activeWorkspaceName = safe;
+  const dir = process.env.DISPATCH_WORKSPACE_STATE_DIR ?? path.join(process.cwd(), ".dispatch");
+  workspaceStateFileOverride = path.join(dir, `${safe}.json`);
+  hydrateWorkspaceState();
+  persistenceSuspended = false;
+  console.log(`[workspace] activated "${safe}" → ${workspaceStateFileOverride}`);
+}
+
 export function setWorkspaceStateFileForTests(filePath: string | null): void {
   workspaceStateFileOverride = filePath;
   persistenceSuspended = filePath === null;
@@ -308,6 +324,7 @@ export function resetWorkspaceForTests(): void {
   chatTranscript = [];
   planExcalidrawData = DEFAULT_PLAN_ELEMENTS;
   workspaceStateFileOverride = null;
+  activeWorkspaceName = "";
   persistenceSuspended = true;
 }
 
@@ -326,4 +343,4 @@ export function safeWorkspaceTab(value: unknown): WorkspaceTab {
   return value === "plan" ? "plan" : "canvas";
 }
 
-// hydrateWorkspaceState(); // TEMP: persistence disabled
+// workspace is activated lazily on first client join via activateWorkspace()

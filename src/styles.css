@@ -515,6 +515,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   height: 100%;
 }
 
+.vsc-titlebar-workspace {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fg);
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
 .vsc-titlebar-nav {
   display: flex;
   align-items: stretch;
@@ -981,6 +990,59 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .vsc-field-textarea::placeholder,
 .vsc-field-input::placeholder { color: var(--fg-d); }
 
+.vsc-model-providers {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+.vsc-model-provider-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--bd);
+  background: transparent;
+  color: var(--fg-m);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vsc-model-provider-btn:hover {
+  background: var(--hov);
+  color: var(--fg);
+}
+.vsc-model-provider-btn.active {
+  background: rgba(0, 120, 212, 0.1);
+  color: var(--acc);
+  border-color: rgba(0, 120, 212, 0.35);
+}
+.vsc-field-select {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--inp);
+  color: var(--fg);
+  border: 1px solid var(--bd);
+  border-radius: 3px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23717171'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+.vsc-field-select:focus {
+  outline: none;
+  border-color: var(--bd-f);
+}
+
 .vsc-field-error {
   font-size: 11px;
   color: var(--err);
@@ -1445,7 +1507,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .vsc-chat-history {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 10px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1481,11 +1543,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* Input bar */
 .vsc-chat-input-wrap {
   display: flex;
-  gap: 0;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 10px;
   border-top: 1px solid var(--bd);
   flex-shrink: 0;
-  align-items: flex-end;
 }
 .vsc-chat-input {
   flex: 1;
@@ -1499,8 +1561,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   resize: none;
   outline: none;
   line-height: 1.5;
-  min-height: 46px;
+  min-height: 32px;
   max-height: 120px;
+  width: 100%;
 }
 .vsc-chat-input:focus { border-color: var(--bd-f); }
 
@@ -1560,29 +1623,41 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .vsc-chat-ops-deny:hover { border-color: #9aa3b5; color: #3a4560; }
 
-/* ── Chat row layout — VSCode Copilot style ──────── */
-.vsc-chat-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 0; }
+/* ── Chat messages ───────────────────────────────── */
+.vsc-chat-row { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; }
 .vsc-chat-row + .vsc-chat-row { border-top: 1px solid var(--bd); }
 
-.vsc-chat-row-header { display: flex; align-items: center; gap: 5px; }
-.vsc-chat-row-header--user { flex-direction: row-reverse; }
+/* Assistant header: square chip + name */
+.vsc-chat-row-header { display: flex; align-items: center; gap: 7px; }
+.vsc-chat-row-header--user { display: none; }
 
 .vsc-chat-ai-avatar {
-  width: 16px; height: 16px; border-radius: 3px;
+  width: 20px; height: 20px; border-radius: 4px;
   background: var(--acc); color: #fff;
-  font-size: 9px; font-weight: 800; letter-spacing: -0.02em;
+  font-size: 10px; font-weight: 800;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.vsc-chat-role-label { font-size: 11px; font-weight: 600; color: var(--fg-m); }
-.vsc-chat-role-label--user { color: var(--fg-m); }
+.vsc-chat-role-label { font-size: 12px; font-weight: 600; color: var(--fg); }
 
-/* Body: indented under avatar, no background */
-.vsc-chat-row-body { padding: 0 0 10px 21px; }
-.vsc-chat-row-body--user { padding-left: 0; padding-right: 21px; }
+/* Message bodies */
+.vsc-chat-row-body { padding-left: 27px; }
+.vsc-chat-row-body--user { padding-left: 20px; display: flex; justify-content: flex-end; }
 
+/* Text */
 .vsc-chat-text { margin: 0; font-size: 12.5px; color: var(--fg); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-.vsc-chat-row--user .vsc-chat-text { color: var(--fg-m); }
+
+/* User: right-aligned square box */
+.vsc-chat-row-body--user .vsc-chat-text {
+  background: #e8f1fb;
+  border: 1px solid #c8dcf5;
+  border-radius: 4px;
+  padding: 7px 10px;
+  max-width: 88%;
+  display: inline-block;
+  text-align: left;
+  color: var(--fg);
+}
 
 .vsc-chat-empty-icon { opacity: 0.22; }
 .vsc-chat-empty-title { font-size: 13px; font-weight: 600; color: var(--fg); margin: 0; }
@@ -1595,9 +1670,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 @keyframes vsc-blink { 50% { opacity: 0; } }
 
-/* Input box + send button */
+/* Input */
 .vsc-chat-input-box { position: relative; flex: 1; }
-.vsc-chat-input-box .vsc-chat-input { padding-right: 34px; width: 100%; }
+.vsc-chat-input-box .vsc-chat-input { padding-right: 36px; width: 100%; }
 
 .vsc-chat-send {
   position: absolute; right: 5px; bottom: 5px;
@@ -1606,11 +1681,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: background 0.1s, color 0.1s; padding: 0;
 }
-.vsc-chat-send:disabled { opacity: 0.28; cursor: default; }
+.vsc-chat-send:disabled { opacity: 0.25; cursor: default; }
 .vsc-chat-send--active { background: var(--acc); color: #fff; }
 .vsc-chat-send--active:hover { background: var(--acc-d); }
 
-.vsc-chat-input-hint { margin: 3px 0 0; font-size: 10px; color: var(--fg-d); padding-right: 2px; }
+.vsc-chat-input-hint { margin: 0; font-size: 10px; color: var(--fg-d); text-align: right; }
 
 /* ── Bottom panel CLI bar ────────────────────────── */
 .vsc-bp-cmd-bar {

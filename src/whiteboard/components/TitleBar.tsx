@@ -5,9 +5,10 @@ interface TitleBarProps {
   userCount: number;
   workspaceTab: WorkspaceTab;
   onWorkspaceTabChange: (tab: WorkspaceTab) => void;
+  workspace: string;
 }
 
-export function TitleBar({ status, userCount, workspaceTab, onWorkspaceTabChange }: TitleBarProps) {
+export function TitleBar({ status, userCount, workspaceTab, onWorkspaceTabChange, workspace }: TitleBarProps) {
   return (
     <header className="vsc-titlebar">
       <div className="vsc-titlebar-brand">
@@ -18,6 +19,7 @@ export function TitleBar({ status, userCount, workspaceTab, onWorkspaceTabChange
           <rect x="8" y="8" width="5" height="5" rx="1" fill="currentColor" opacity="0.3" />
         </svg>
         DISPATCH.AI
+        {workspace && <span className="vsc-titlebar-workspace">{workspace}</span>}
       </div>
 
       <div className="vsc-titlebar-nav" role="tablist" aria-label="Workspace">

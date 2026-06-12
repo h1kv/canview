@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions.js";
-import type { EdgeV2Kind, NodeV2Type } from "../../../../shared/types.js";
+import type { EdgeV2Kind } from "../../../../shared/types.js";
 import { send, broadcast, nodes, edges, chatTranscript, appendChatMessage } from "../../state/store.js";
 import { createNodeFromPayload, createEdge, updateNode, deleteNode, deleteEdge } from "../../state/operations.js";
 import { serializeGraph } from "../../chat/graphSerializer.js";
@@ -21,8 +21,8 @@ function proposalText(text: string, summary: string | undefined): string {
   if (text.trim()) return text;
   const summaryText = typeof summary === "string" ? summary.trim() : "";
   return summaryText
-    ? `I can set that up as a focused workflow: ${summaryText}. Review the proposed changes and apply them when you're ready.`
-    : "I can set that up as a focused workflow. Review the proposed changes and apply them when you're ready.";
+    ? `Here's what I'd propose: ${summaryText}. Review the changes and apply when ready.`
+    : "Here's a workflow proposal. Review the changes and apply when ready.";
 }
 
 function textOrFallback(text: string, fallback: string): string {
@@ -31,62 +31,8 @@ function textOrFallback(text: string, fallback: string): string {
 
 function applyAcknowledgement(operations: ChatGraphOperation[]): string {
   const count = operations.length;
-  if (count === 1) return "Done, I applied that workflow change to the canvas.";
-  return `Done, I applied ${count} workflow changes to the canvas.`;
-}
-
-
-const BUILD_CHAIN: Array<{
-  type: NodeV2Type;
-  title: string;
-  taskPrompt?: (userText: string) => string;
-}> = [
-  {
-    type: "investigate",
-    title: "Research requirements",
-    taskPrompt: (userText) =>
-      `Research the subject, audience, source material, and constraints for this request. Capture concrete facts and references needed downstream.\n\nUser request: ${userText}`,
-  },
-  {
-    type: "plan",
-    title: "Plan website",
-    taskPrompt: (userText) =>
-      `Create a practical implementation plan, page/content structure, and acceptance criteria for the requested build.\n\nUser request: ${userText}`,
-  },
-  {
-    type: "design",
-    title: "Design experience",
-    taskPrompt: (userText) =>
-      `Design the UI/UX direction, layout system, visual hierarchy, responsive behavior, and Tailwind CSS styling approach for the requested build.\n\nUser request: ${userText}`,
-  },
-  {
-    type: "create",
-    title: "Create implementation",
-    taskPrompt: (userText) =>
-      `Build the complete implementation. Pull real content directly from the Investigate node output — names, projects, skills, roles, links, achievements — and use it. Never use placeholder text or "add verified X here" copy. If something wasn't researched, make a sensible design choice and build it anyway. Output a complete file-map using --- FILE: path --- delimiters for every file.\n\nUser request: ${userText}`,
-  },
-  {
-    type: "evaluate",
-    title: "Evaluate output",
-    taskPrompt: () =>
-      `Check if the upstream output contains --- FILE: path --- blocks with complete file content. If it does, respond with exactly: VERDICT: PASS. If there are no file blocks at all, respond with: VERDICT: FAIL — no file map found.`,
-  },
-  { type: "apply", title: "Write files" },
-];
-
-function isBuildWorkflowRequest(userText: string): boolean {
-  return /\b(build|make|create|implement|generate|scaffold)\b/i.test(userText)
-    && /\b(portfolio|website|web\s*site|site|web\s*app|app|tool|project)\b/i.test(userText);
-}
-
-function operationId(op: ChatGraphOperation): string | null {
-  if (op.op === "create_node") return op.tempId;
-  if (op.op === "update_node" || op.op === "delete_node") return op.nodeId;
-  if (op.op === "create_edge") return op.tempId;
-  if (op.op === "delete_edge") return op.edgeId;
-  if (op.op === "delete_edge_between") return `${op.sourceId}->${op.targetId}:${op.kind ?? "any"}`;
-  if (op.op === "insert_node_between") return op.tempId;
-  return null;
+  if (count === 1) return "Done, applied that change to the canvas.";
+  return `Done, applied ${count} changes to the canvas.`;
 }
 
 function cloneOperation(op: ChatGraphOperation): ChatGraphOperation {
@@ -103,10 +49,6 @@ interface NormalizedOpsResult {
 
 function normText(value: string): string {
   return value.trim().toLowerCase();
-}
-
-function isEdgeKind(value: unknown): value is EdgeV2Kind {
-  return value === "flow" || value === "midput" || value === "reject";
 }
 
 function operationTempIds(operations: ChatGraphOperation[]): Set<string> {
@@ -164,11 +106,7 @@ function findExistingEdgeId(
   const sourceId = resolveNodeRef(sourceRef, tempIds);
   const targetId = resolveNodeRef(targetRef, tempIds);
   for (const [edgeId, edge] of edges) {
-    if (
-      edge.sourceId === sourceId &&
-      edge.targetId === targetId &&
-      (!kind || edge.kind === kind)
-    ) {
+    if (edge.sourceId === sourceId && edge.targetId === targetId && (!kind || edge.kind === kind)) {
       return edgeId;
     }
   }
@@ -245,27 +183,9 @@ function normalizeChatOperationsForGraph(operations: ChatGraphOperation[]): Norm
       }
 
       pushDeleteEdge(edgeId);
-      normalized.push({
-        op: "create_node",
-        tempId: op.tempId,
-        nodeType: op.nodeType,
-        title: op.title,
-        config: op.config,
-      });
-      normalized.push({
-        op: "create_edge",
-        tempId: `${op.tempId}-in`,
-        sourceId: existingEdge.sourceId,
-        targetId: op.tempId,
-        kind: existingEdge.kind,
-      });
-      normalized.push({
-        op: "create_edge",
-        tempId: `${op.tempId}-out`,
-        sourceId: op.tempId,
-        targetId: existingEdge.targetId,
-        kind: existingEdge.kind === "reject" ? "flow" : existingEdge.kind,
-      });
+      normalized.push({ op: "create_node", tempId: op.tempId, nodeType: op.nodeType, title: op.title, config: op.config });
+      normalized.push({ op: "create_edge", tempId: `${op.tempId}-in`, sourceId: existingEdge.sourceId, targetId: op.tempId, kind: existingEdge.kind });
+      normalized.push({ op: "create_edge", tempId: `${op.tempId}-out`, sourceId: op.tempId, targetId: existingEdge.targetId, kind: existingEdge.kind === "reject" ? "flow" : existingEdge.kind });
       continue;
     }
 
@@ -275,153 +195,33 @@ function normalizeChatOperationsForGraph(operations: ChatGraphOperation[]): Norm
   return { operations: normalized, errors };
 }
 
-function normalizeBuildProposal(
-  userText: string,
-  operations: ChatGraphOperation[],
-  summary: string
-): { operations: ChatGraphOperation[]; summary: string } {
-  if (!isBuildWorkflowRequest(userText)) return { operations, summary };
+const OUTPUT_INJECT_RE = /\b(error|fail|wrong|broken|crash|output|result|what did|why|didn.t work)\b/i;
 
-  const existingInitialiser = Array.from(nodes.values()).find((node) => node.type === "initialiser") ?? null;
-  const redirects = new Map<string, string>();
-  const normalized: ChatGraphOperation[] = [];
+function buildOutputContext(userText: string, selectedNodeId: string | null): string {
+  const hasKeyword = OUTPUT_INJECT_RE.test(userText);
+  const hasErrors = Array.from(nodes.values()).some((n) => n.status === "error");
 
-  for (const rawOp of operations) {
-    const op = cloneOperation(rawOp);
-    if (op.op === "create_node" && op.nodeType === "initialiser" && existingInitialiser) {
-      redirects.set(op.tempId, existingInitialiser.id);
-      continue;
-    }
-    normalized.push(op);
-  }
+  if (!hasKeyword && !hasErrors && !selectedNodeId) return "";
 
-  function resolveId(id: string): string {
-    return redirects.get(id) ?? id;
-  }
+  const parts: string[] = [];
+  let total = 0;
+  const MAX = 2000;
 
-  for (const op of normalized) {
-    if (op.op === "create_edge") {
-      op.sourceId = resolveId(op.sourceId);
-      op.targetId = resolveId(op.targetId);
-    }
-  }
-
-  const createdByType = new Map<NodeV2Type, Extract<ChatGraphOperation, { op: "create_node" }>>();
-  for (const op of normalized) {
-    if (op.op === "create_node" && !createdByType.has(op.nodeType)) {
-      createdByType.set(op.nodeType, op);
-    }
-  }
-
-  const existingByType = new Map<NodeV2Type, string>();
   for (const node of nodes.values()) {
-    if (!existingByType.has(node.type)) existingByType.set(node.type, node.id);
+    if (!node.output || total >= MAX) continue;
+    const isSelected = selectedNodeId !== null && node.id === selectedNodeId;
+    const isError = node.status === "error";
+    const isDone = node.status === "done";
+    if (!isSelected && !isError && !(hasKeyword && isDone)) continue;
+
+    const excerpt = isError ? node.output : node.output.slice(0, 500);
+    const entry = `\n${node.title} (${node.status ?? "unknown"}):\n${excerpt}`;
+    parts.push(entry);
+    total += entry.length;
   }
 
-  function ensureNode(type: NodeV2Type, title: string, taskPrompt?: string): string {
-    const created = createdByType.get(type);
-    if (created) {
-      created.title = created.title || title;
-      if (taskPrompt) {
-        // BUILD_CHAIN task prompts always override the model's generated ones
-        created.config = { ...(created.config ?? {}), taskPrompt };
-      }
-      return created.tempId;
-    }
-
-    const existingId = existingByType.get(type);
-    if (existingId) {
-      if (taskPrompt) {
-        normalized.push({ op: "update_node", nodeId: existingId, config: { taskPrompt } });
-      }
-      return existingId;
-    }
-
-    const tempId = `auto-${type}`;
-    const op: Extract<ChatGraphOperation, { op: "create_node" }> = {
-      op: "create_node",
-      tempId,
-      nodeType: type,
-      title,
-      config: taskPrompt ? { taskPrompt } : undefined,
-    };
-    normalized.push(op);
-    createdByType.set(type, op);
-    return tempId;
-  }
-
-  let initialiserId: string;
-  if (existingInitialiser) {
-    initialiserId = existingInitialiser.id;
-    const existingContent = existingInitialiser.config?.content?.trim() ?? "";
-    if (!existingContent.includes(userText.trim())) {
-      normalized.push({ op: "update_node", nodeId: existingInitialiser.id, config: { content: userText } });
-    }
-  } else {
-    const createdInitialiser = createdByType.get("initialiser");
-    if (createdInitialiser) {
-      initialiserId = createdInitialiser.tempId;
-      createdInitialiser.config = {
-        ...(createdInitialiser.config ?? {}),
-        workspacePath: createdInitialiser.config?.workspacePath?.trim() ? createdInitialiser.config.workspacePath : "./workspace",
-        content: userText,
-      };
-    } else {
-      initialiserId = "auto-initialiser";
-      normalized.unshift({
-        op: "create_node",
-        tempId: initialiserId,
-        nodeType: "initialiser",
-        title: "Initialiser",
-        config: { workspacePath: "./workspace", content: userText },
-      });
-    }
-  }
-
-  const chainIds = [initialiserId];
-  for (const spec of BUILD_CHAIN) {
-    chainIds.push(ensureNode(spec.type, spec.title, spec.taskPrompt?.(userText)));
-  }
-
-  function hasFlowEdge(sourceId: string, targetId: string): boolean {
-    const source = resolveId(sourceId);
-    const target = resolveId(targetId);
-    for (const edge of edges.values()) {
-      if (edge.kind === "flow" && edge.sourceId === source && edge.targetId === target) return true;
-    }
-    return normalized.some((op) => (
-      op.op === "create_edge"
-      && op.kind === "flow"
-      && resolveId(op.sourceId) === source
-      && resolveId(op.targetId) === target
-    ));
-  }
-
-  let edgeCounter = 1;
-  for (let i = 0; i < chainIds.length - 1; i++) {
-    const sourceId = chainIds[i];
-    const targetId = chainIds[i + 1];
-    if (hasFlowEdge(sourceId, targetId)) continue;
-    normalized.push({
-      op: "create_edge",
-      tempId: `auto-flow-${edgeCounter++}`,
-      sourceId,
-      targetId,
-      kind: "flow",
-    });
-  }
-
-  const normalizedIds = new Set(normalized.map(operationId).filter(Boolean));
-  const changed = normalized.length !== operations.length
-    || operations.some((op, index) => operationId(op) !== operationId(normalized[index] ?? op))
-    || normalizedIds.size !== new Set(operations.map(operationId).filter(Boolean)).size;
-
-  return {
-    operations: normalized,
-    summary: changed
-      ? "Create full build chain: Initialiser -> Investigate -> Plan -> Design -> Create -> Evaluate -> Apply"
-      : summary,
-  };
+  if (parts.length === 0) return "";
+  return `\n\n## Node Outputs & Errors${parts.join("")}`;
 }
 
 export async function handleChatMessage(
@@ -432,19 +232,19 @@ export async function handleChatMessage(
   const rawUserText = String(data.content ?? "").trim();
   if (!rawUserText) return;
 
-  const userText = rawUserText;
+  const selectedNodeId = typeof data.selectedNodeId === "string" ? data.selectedNodeId : null;
 
   const history = modelHistory();
   appendChatMessage("user", rawUserText);
 
-  // Build context-rich user turn — fresh graph state every time
   const graphContext = serializeGraph(nodes, edges);
   const issues = validateGraph(nodes, edges);
   const issuesText = issues.length > 0
     ? `\nGRAPH ISSUES:\n${issues.map((i) => `  [${i.kind}] ${i.message}`).join("\n")}`
     : "";
+  const outputContext = buildOutputContext(rawUserText, selectedNodeId);
 
-  const fullUserContent = `${graphContext}${issuesText}\n\n---\nUSER: ${userText}`;
+  const fullUserContent = `${graphContext}${issuesText}${outputContext}\n\n---\nUSER: ${rawUserText}`;
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: CHAT_SYSTEM_PROMPT },
@@ -461,11 +261,9 @@ export async function handleChatMessage(
     if (toolName === "propose_operations" && toolArgs) {
       const { summary, operations } = toolArgs as { summary: string; operations: ChatGraphOperation[] };
       const resolved = normalizeChatOperationsForGraph(Array.isArray(operations) ? operations : []);
-      const buildNormalized = normalizeBuildProposal(userText, resolved.operations, summary);
-      const resolvedFinal = normalizeChatOperationsForGraph(buildNormalized.operations);
-      const finalOperations = resolvedFinal.operations;
-      const operationErrors = [...resolved.errors, ...resolvedFinal.errors];
-      const finalText = proposalText(text, buildNormalized.summary);
+      const finalOperations = resolved.operations;
+      const operationErrors = resolved.errors;
+      const finalText = proposalText(text, summary);
       assistantHistoryText = finalText;
 
       const simResult = simulateOperations(nodes, edges, finalOperations);
@@ -479,8 +277,7 @@ export async function handleChatMessage(
           error: [...operationErrors, ...simResult.errors].join(". "),
         });
       } else {
-        const blockingErrors = validateGraph(simResult.nodes, simResult.edges)
-          .filter((i) => i.kind === "error");
+        const blockingErrors = validateGraph(simResult.nodes, simResult.edges).filter((i) => i.kind === "error");
         if (blockingErrors.length > 0) {
           const errorText = textOrFallback(text, "These changes would leave the graph in an invalid state.");
           assistantHistoryText = errorText;
@@ -494,7 +291,7 @@ export async function handleChatMessage(
             type: "chat:done",
             text: finalText,
             pendingOps: finalOperations,
-            pendingSummary: buildNormalized.summary,
+            pendingSummary: summary,
           });
         }
       }
@@ -505,7 +302,6 @@ export async function handleChatMessage(
       send(ws, { type: "chat:done", text });
     }
 
-    // Store compact history (plain words only, not graph dump)
     appendChatMessage("assistant", assistantHistoryText);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -544,8 +340,7 @@ export function handleChatApply(
     return;
   }
 
-  const blockingErrors = validateGraph(simResult.nodes, simResult.edges)
-    .filter((i) => i.kind === "error");
+  const blockingErrors = validateGraph(simResult.nodes, simResult.edges).filter((i) => i.kind === "error");
   if (blockingErrors.length > 0) {
     send(ws, {
       type: "chat:done",
@@ -555,7 +350,6 @@ export function handleChatApply(
     return;
   }
 
-  // Extract create ops for layout computation
   const createNodeOps = operations.filter(
     (op): op is Extract<ChatGraphOperation, { op: "create_node" }> => op.op === "create_node"
   );
@@ -569,7 +363,6 @@ export function handleChatApply(
     createEdgeOps.map((op) => ({ sourceId: op.sourceId, targetId: op.targetId, kind: op.kind }))
   );
 
-  // tempId → real id map, built as we create nodes/edges
   const tempIdToRealId = new Map<string, string>();
 
   function resolveId(id: string): string {
@@ -579,36 +372,23 @@ export function handleChatApply(
   for (const op of operations) {
     if (op.op === "create_node") {
       const pos = layoutPositions.get(op.tempId) ?? op.position ?? { x: 400, y: 200 };
-      const node = createNodeFromPayload({
-        type: op.nodeType,
-        position: pos,
-        title: op.title,
-        config: op.config,
-        userId,
-      });
+      const node = createNodeFromPayload({ type: op.nodeType, position: pos, title: op.title, config: op.config, userId });
       if (node) {
         tempIdToRealId.set(op.tempId, node.id);
         broadcast({ type: "node:created", node });
       }
-    }
-
-    else if (op.op === "update_node") {
+    } else if (op.op === "update_node") {
       const realId = resolveId(op.nodeId);
       const updated = updateNode(realId, { title: op.title, config: op.config });
       if (updated) broadcast({ type: "node:updated", node: updated });
-    }
-
-    else if (op.op === "delete_node") {
+    } else if (op.op === "delete_node") {
       const realId = resolveId(op.nodeId);
-      // Collect related edge IDs before deleteNode removes them internally
       const relatedEdgeIds = Array.from(edges.entries())
         .filter(([, e]) => e.sourceId === realId || e.targetId === realId)
         .map(([id]) => id);
       for (const eid of relatedEdgeIds) broadcast({ type: "edge:deleted", edgeId: eid });
       if (deleteNode(realId)) broadcast({ type: "node:deleted", nodeId: realId });
-    }
-
-    else if (op.op === "create_edge") {
+    } else if (op.op === "create_edge") {
       const realSourceId = resolveId(op.sourceId);
       const realTargetId = resolveId(op.targetId);
       const edge = createEdge({ sourceId: realSourceId, targetId: realTargetId, kind: op.kind, userId });
@@ -616,9 +396,7 @@ export function handleChatApply(
         tempIdToRealId.set(op.tempId, edge.id);
         broadcast({ type: "edge:created", edge });
       }
-    }
-
-    else if (op.op === "delete_edge") {
+    } else if (op.op === "delete_edge") {
       const realId = resolveId(op.edgeId);
       if (deleteEdge(realId)) broadcast({ type: "edge:deleted", edgeId: realId });
     }

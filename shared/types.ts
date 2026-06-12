@@ -12,7 +12,9 @@ export type NodeV2Type =
   | "doc"
   | "apply"
   | "context"
-  | "review";
+  | "review"
+  | "parallel"
+  | "merge";
 
 export type EdgeV2Kind = "flow" | "midput" | "reject";
 export type NodeStatus = "idle" | "running" | "done" | "error";
@@ -24,6 +26,7 @@ export interface NodeV2Config {
   workspacePath?: string; // initialiser
   taskPrompt?: string;    // SDLC nodes
   content?: string;       // context node
+  model?: string;         // per-node model override (frontend only for now)
 }
 
 export interface NodeV2 {

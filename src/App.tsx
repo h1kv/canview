@@ -4,7 +4,9 @@ import { Whiteboard } from "./whiteboard/Whiteboard.js";
 
 export default function App() {
   const [username, setUsername] = useState<string>("");
+  const [workspace, setWorkspace] = useState<string>("");
   const [draftName, setDraftName] = useState<string>("");
+  const [draftWorkspace, setDraftWorkspace] = useState<string>("");
 
   if (window.location.pathname === "/patch-pitch") {
     return <PitchDeck />;
@@ -13,9 +15,10 @@ export default function App() {
   function handleJoin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextName = draftName.trim();
-
+    const nextWorkspace = draftWorkspace.trim() || "default";
     if (nextName) {
       setUsername(nextName);
+      setWorkspace(nextWorkspace);
     }
   }
 
@@ -45,7 +48,17 @@ export default function App() {
             maxLength={40}
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
-            placeholder="Enter your name to continue"
+            placeholder="Your name"
+          />
+          <input
+            id="workspace"
+            type="text"
+            className="join-input"
+            autoComplete="off"
+            maxLength={40}
+            value={draftWorkspace}
+            onChange={(event) => setDraftWorkspace(event.target.value)}
+            placeholder="Workspace name (e.g. portfolio)"
           />
           <button type="submit" className="join-submit" disabled={!draftName.trim()}>
             Launch
@@ -61,5 +74,5 @@ export default function App() {
     );
   }
 
-  return <Whiteboard username={username} />;
+  return <Whiteboard username={username} workspace={workspace} />;
 }

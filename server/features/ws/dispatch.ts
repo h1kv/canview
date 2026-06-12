@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import { debug } from "../../utils/debug.js";
-import { users } from "../state/store.js";
+import { users, send } from "../state/store.js";
 import { handleCursorUpdate } from "./handlers/cursor.js";
 import { handleJoin } from "./handlers/join.js";
 import { handleNodeCreate, handleNodeDelete, handleNodeUpdate } from "./handlers/node.js";
@@ -41,7 +41,13 @@ export function dispatchMessage(ws: WebSocket, userId: string, raw: Buffer): voi
     case "review:respond": return handleReviewRespond(ws, userId, message);
     case "plan:update":   return handlePlanUpdate(ws, message);
     case "chat:message":  void handleChatMessage(ws, userId, message); return;
-    case "chat:apply":    return handleChatApply(ws, userId, message);
+    case "chat:apply": {
+      try { handleChatApply(ws, userId, message); } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        send(ws, { type: "chat:error", message: msg });
+      }
+      return;
+    }
     default:
       debug("unknown-message", { userId, type: message.type });
   }

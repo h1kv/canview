@@ -50,9 +50,10 @@ export interface UseSocketResult {
   sendPlanUpdate: (elements: string) => void;
   hostedSiteUrl: string | null;
   skillsMeta: Record<string, SkillMeta>;
+  activeWorkspace: string;
 }
 
-export function useSocket(username: string): UseSocketResult {
+export function useSocket(username: string, workspace: string): UseSocketResult {
   const socketRef = useRef<WebSocket | null>(null);
   const selfIdRef = useRef<string | null>(null);
   const nodesRef = useRef<Map<string, NodeV2>>(new Map());
@@ -73,6 +74,7 @@ export function useSocket(username: string): UseSocketResult {
   const [chatMessages, setChatMessages] = useState<ChatTranscriptMessage[]>([]);
   const [chatHydrationVersion, setChatHydrationVersion] = useState(0);
   const [skillsMeta, setSkillsMeta] = useState<Record<string, SkillMeta>>({});
+  const [activeWorkspace, setActiveWorkspace] = useState("");
   const logIdRef = useRef(0);
 
   function bumpGraph() { setGraphVersion((v) => v + 1); }
@@ -91,7 +93,7 @@ export function useSocket(username: string): UseSocketResult {
 
     socket.addEventListener("open", () => {
       setStatus("connected");
-      sendJson(socketRef, { type: "join", name: username });
+      sendJson(socketRef, { type: "join", name: username, workspace });
     });
 
     socket.addEventListener("message", (event: MessageEvent) => {
@@ -105,6 +107,7 @@ export function useSocket(username: string): UseSocketResult {
       switch (message.type) {
         case "init": {
           selfIdRef.current = message.selfId as string;
+          if (typeof message.workspace === "string") setActiveWorkspace(message.workspace);
           usersRef.current = new Map(((message.users as BoardUser[]) || []).map((u) => [u.id, u]));
           nodesRef.current = new Map(((message.nodes as NodeV2[]) || []).map((n) => [n.id, n]));
           edgesRef.current = new Map(((message.edges as EdgeV2[]) || []).map((e) => [e.id, e]));
@@ -312,5 +315,6 @@ export function useSocket(username: string): UseSocketResult {
     sendPlanUpdate: (elements: string) => sendJson(socketRef, { type: "plan:update", elements }),
     hostedSiteUrl,
     skillsMeta,
+    activeWorkspace,
   };
 }

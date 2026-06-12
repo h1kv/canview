@@ -58,6 +58,86 @@ function NodeButton({
   );
 }
 
+const MODEL_PROVIDERS = [
+  {
+    id: "openai",
+    label: "ChatGPT",
+    models: [
+      { id: "gpt-4o", label: "GPT-4o" },
+      { id: "gpt-4o-mini", label: "GPT-4o mini" },
+      { id: "o3", label: "o3" },
+      { id: "o4-mini", label: "o4-mini" },
+    ],
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    models: [
+      { id: "claude-opus-4-8", label: "Opus 4" },
+      { id: "claude-sonnet-4-6", label: "Sonnet 4" },
+      { id: "claude-haiku-4-5-20251001", label: "Haiku 4" },
+    ],
+  },
+  {
+    id: "composer",
+    label: "Composer",
+    models: [
+      { id: "composer-v1", label: "Composer" },
+    ],
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    models: [
+      { id: "gemini-2.5-pro", label: "2.5 Pro" },
+      { id: "gemini-2.0-flash", label: "2.0 Flash" },
+      { id: "gemini-1.5-pro", label: "1.5 Pro" },
+    ],
+  },
+] as const;
+
+function ModelPicker({ value, onChange }: { value: string | undefined; onChange: (m: string) => void }) {
+  const activeProvider =
+    MODEL_PROVIDERS.find((p) => p.models.some((m) => m.id === value)) ?? MODEL_PROVIDERS[0];
+
+  const selectValue =
+    value && activeProvider.models.some((m) => m.id === value) ? value : activeProvider.models[0].id;
+
+  function handleProviderClick(providerId: string) {
+    if (providerId === activeProvider.id) return;
+    const p = MODEL_PROVIDERS.find((pr) => pr.id === providerId)!;
+    onChange(p.models[0].id);
+  }
+
+  return (
+    <div className="vsc-field">
+      <span className="vsc-field-label">Model</span>
+      <div className="vsc-model-providers">
+        {MODEL_PROVIDERS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`vsc-model-provider-btn${activeProvider.id === p.id && value ? " active" : ""}`}
+            onClick={() => handleProviderClick(p.id)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <select
+        className="vsc-field-select"
+        value={value ? selectValue : ""}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {!value && <option value="" disabled>— skill default —</option>}
+        {activeProvider.models.map((m) => (
+          <option key={m.id} value={m.id}>{m.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function NodeProperties({
   node,
   titleDraft,
@@ -150,6 +230,14 @@ function NodeProperties({
               rows={5}
             />
           </label>
+        )}
+
+        {/* Model picker for SDLC nodes */}
+        {isSDLC && (
+          <ModelPicker
+            value={node.config?.model}
+            onChange={(m) => onConfigChange({ model: m })}
+          />
         )}
 
         {/* Task prompt for SDLC nodes */}
@@ -295,7 +383,7 @@ export function Sidebar({
           <div className="vsc-sidebar-section">
             <div className="vsc-section-hdr">Infrastructure</div>
             <div className="vsc-list">
-              {(["initialiser", "apply", "context", "review"] as NodeV2Type[]).map((type) => (
+              {(["initialiser", "apply", "context", "review", "parallel", "merge"] as NodeV2Type[]).map((type) => (
                 <NodeButton
                   key={type}
                   type={type}

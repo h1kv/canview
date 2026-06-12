@@ -185,6 +185,7 @@ export function safelyMaterialize(
   // Execute using the parsed content (re-parse needed since executeWritePlan lost content)
   const parsed = parseFileMap(input);
   const resolvedWorkspace = path.resolve(workspacePath);
+  mkdirSync(resolvedWorkspace, { recursive: true });
   let written = 0;
   let skipped = 0;
 

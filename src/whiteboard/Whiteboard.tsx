@@ -18,9 +18,10 @@ const PANEL_HEIGHT = 220;
 
 interface WhiteboardProps {
   username: string;
+  workspace: string;
 }
 
-export function Whiteboard({ username }: WhiteboardProps) {
+export function Whiteboard({ username, workspace }: WhiteboardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View>({ x: 0, y: 0, scale: 1 });
   const interactionStateRef = useRef<InteractionState>({
@@ -58,7 +59,8 @@ export function Whiteboard({ username }: WhiteboardProps) {
     sendPlanUpdate,
     hostedSiteUrl,
     skillsMeta,
-  } = useSocket(username);
+    activeWorkspace,
+  } = useSocket(username, workspace);
 
   useEffect(() => {
     if (terminalLogs.length > 0) setPanelOpen(true);
@@ -197,6 +199,7 @@ export function Whiteboard({ username }: WhiteboardProps) {
         userCount={connectedUsers.length}
         workspaceTab={workspaceTab}
         onWorkspaceTabChange={setWorkspaceTab}
+        workspace={activeWorkspace}
       />
 
       <div className={`vsc-workspace${(sidebarTab === null || workspaceTab === "conversate") ? " sidebar-collapsed" : ""}`}>

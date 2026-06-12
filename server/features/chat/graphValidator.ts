@@ -59,6 +59,12 @@ export function validateGraph(
     if (node.type === "apply" && flowTo(node.id).length === 0) {
       issues.push({ kind: "warn", message: `"${node.title}" (Apply) has no flow input.`, nodeId: node.id });
     }
+    if (node.type === "parallel" && flowFrom(node.id).length < 2) {
+      issues.push({ kind: "error", message: `"${node.title}" (Parallel) needs at least 2 outgoing flow edges to branch.`, nodeId: node.id });
+    }
+    if (node.type === "merge" && flowTo(node.id).length < 2) {
+      issues.push({ kind: "error", message: `"${node.title}" (Merge) needs at least 2 incoming flow edges to collect.`, nodeId: node.id });
+    }
   }
 
   // Cycle detection (DFS)
