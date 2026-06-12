@@ -4,38 +4,55 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#F8FAFC",
-        surface: "#FFFFFF",
-        accent: {
-          DEFAULT: "#2563EB",
-          hover: "#3B82F6"
-        },
-        text: {
-          DEFAULT: "#1E293B",
-          muted: "#64748B"
-        },
-        divider: "#E2E8F0",
-        hero: "#E0E7EF"
+        bg: "var(--color-bg)",
+        surface: "var(--color-surface)",
+        "surface-alt": "var(--color-surface-alt)",
+        accent: "var(--color-accent)",
+        "accent-dark": "var(--color-accent-dark)",
+        text: "var(--color-text)",
+        muted: "var(--color-muted)",
+        border: "var(--color-border)",
+        award: "var(--color-award)",
+        link: "var(--color-link)",
+        "link-hover": "var(--color-link-hover)"
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"]
       },
-      boxShadow: {
-        surface: "0 2px 12px rgba(16, 30, 54, 0.06)",
-        "surface-hover": "0 8px 24px rgba(16, 30, 54, 0.10)"
+      fontSize: {
+        base: "var(--text-base)",
+        lg: "var(--text-lg)",
+        xl: "var(--text-xl)",
+        "2xl": "var(--text-2xl)",
+        "3xl": "var(--text-3xl)"
+      },
+      fontWeight: {
+        semibold: "var(--font-semibold)",
+        bold: "var(--font-bold)"
+      },
+      spacing: {
+        1: "var(--space-1)",
+        2: "var(--space-2)",
+        3: "var(--space-3)",
+        4: "var(--space-4)",
+        6: "var(--space-6)",
+        8: "var(--space-8)",
+        12: "var(--space-12)"
       },
       borderRadius: {
-        card: "12px"
+        radius: "var(--radius)",
+        "radius-sm": "var(--radius-sm)"
+      },
+      boxShadow: {
+        DEFAULT: "var(--shadow)",
+        card: "var(--shadow)",
+        lg: "0 18px 40px rgba(8, 13, 24, 0.28)"
       },
       maxWidth: {
-        content: "800px"
+        portfolio: "900px"
       },
-      letterSpacing: {
-        heading: "-0.01em"
-      },
-      backgroundImage: {
-        "avatar-gradient": "linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)",
-        "hero-gradient": "linear-gradient(180deg, #F8FAFC 0%, #E0E7EF 100%)"
+      transitionTimingFunction: {
+        smooth: "cubic-bezier(0.22, 1, 0.36, 1)"
       }
     }
   },
@@ -43,6 +60,3 @@ module.exports = {
 };
 
 
----
-
-## Branch: Create Tailwind CSS File
