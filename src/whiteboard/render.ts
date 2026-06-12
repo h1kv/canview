@@ -131,114 +131,214 @@ function drawMidputPort(ctx: CanvasRenderingContext2D, point: Point, accent: str
   ctx.stroke();
 }
 
-function drawNode(ctx: CanvasRenderingContext2D, node: NodeV2, selected: boolean): void {
+function drawNode(ctx: CanvasRenderingContext2D, node: NodeV2, selected: boolean, animTime?: number): void {
   const definition = NODE_REGISTRY[node.type];
   if (!definition) return;
   const accent = definition.accent;
   const isSDLC = SDLC_NODE_TYPES.includes(node.type as typeof SDLC_NODE_TYPES[number]);
+  const status = node.status ?? "idle";
+  const isRunning = status === "running";
+  const isDone    = status === "done";
+  const isError   = status === "error";
+  const t = animTime ?? 0;
+  const pulse = isRunning ? (Math.sin(t * 0.004) * 0.5 + 0.5) : 0; // 0..1
 
-  // Drop shadow
   ctx.save();
-  ctx.shadowColor = selected ? `${accent}44` : "rgba(0,0,0,0.08)";
-  ctx.shadowBlur = selected ? 12 : 5;
+
+  // ── Shadow / glow ──────────────────────────────────────────────────────────
+  if (isRunning) {
+    ctx.shadowColor = `rgba(230,168,23,${0.28 + pulse * 0.38})`;
+    ctx.shadowBlur  = 18 + pulse * 14;
+  } else if (isError) {
+    ctx.shadowColor = "rgba(217,63,63,0.32)";
+    ctx.shadowBlur  = 14;
+  } else if (isDone) {
+    ctx.shadowColor = "rgba(26,158,90,0.18)";
+    ctx.shadowBlur  = 8;
+  } else {
+    ctx.shadowColor = selected ? `${accent}44` : "rgba(0,0,0,0.08)";
+    ctx.shadowBlur  = selected ? 12 : 5;
+  }
   ctx.shadowOffsetY = 2;
+
+  // Node body
   ctx.beginPath();
   ctx.roundRect(node.x, node.y, node.width, node.height, 4);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.shadowColor = "transparent";
-  ctx.shadowBlur = 0;
+  ctx.shadowColor   = "transparent";
+  ctx.shadowBlur    = 0;
   ctx.shadowOffsetY = 0;
 
-  // Border
+  // Done — subtle green tint on body
+  if (isDone) {
+    ctx.beginPath();
+    ctx.roundRect(node.x, node.y, node.width, node.height, 4);
+    ctx.fillStyle = "rgba(26,158,90,0.04)";
+    ctx.fill();
+  }
+
+  // ── Border ─────────────────────────────────────────────────────────────────
   ctx.beginPath();
   ctx.roundRect(node.x, node.y, node.width, node.height, 4);
-  ctx.strokeStyle = selected ? accent : `${accent}88`;
-  ctx.lineWidth = selected ? 2 : 1.5;
+  if (isRunning) {
+    ctx.strokeStyle = `rgba(230,168,23,${0.65 + pulse * 0.35})`;
+    ctx.lineWidth   = 2;
+  } else if (isError) {
+    ctx.strokeStyle = "#d93f3f";
+    ctx.lineWidth   = 2;
+  } else if (isDone) {
+    ctx.strokeStyle = "rgba(26,158,90,0.55)";
+    ctx.lineWidth   = 1.5;
+  } else {
+    ctx.strokeStyle = selected ? accent : `${accent}88`;
+    ctx.lineWidth   = selected ? 2 : 1.5;
+  }
   ctx.stroke();
 
-  // Accent header bar
+  // ── Header bar ─────────────────────────────────────────────────────────────
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(node.x, node.y, node.width, node.height, 4);
   ctx.clip();
-  ctx.fillStyle = accent;
-  ctx.fillRect(node.x, node.y, node.width, 28);
-  ctx.restore();
 
-  // Status dot in header
-  const dotColor = statusColor(node.status ?? "idle");
-  if (dotColor !== "transparent") {
-    ctx.beginPath();
-    ctx.arc(node.x + node.width - 12, node.y + 14, 4, 0, Math.PI * 2);
-    ctx.fillStyle = dotColor;
-    ctx.fill();
+  const headerColor = isRunning ? "#d4920f" : isError ? "#c72e0f" : isDone ? "#16825d" : accent;
+  ctx.fillStyle = headerColor;
+  ctx.fillRect(node.x, node.y, node.width, 28);
+
+  // Running shimmer sweep across header
+  if (isRunning) {
+    const shimX = ((t * 0.09) % (node.width + 80)) - 40;
+    const shimGrad = ctx.createLinearGradient(node.x + shimX, 0, node.x + shimX + 60, 0);
+    shimGrad.addColorStop(0,   "rgba(255,255,255,0)");
+    shimGrad.addColorStop(0.5, "rgba(255,255,255,0.22)");
+    shimGrad.addColorStop(1,   "rgba(255,255,255,0)");
+    ctx.fillStyle = shimGrad;
+    ctx.fillRect(node.x, node.y, node.width, 28);
   }
 
-  // Header label (type role)
-  ctx.fillStyle = "#ffffff";
+  ctx.restore();
+
+  // ── Animated progress bar (bottom edge, running only) ──────────────────────
+  if (isRunning) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(node.x, node.y, node.width, node.height, 4);
+    ctx.clip();
+    const sweep = ((t * 0.13) % (node.width * 2)) - node.width * 0.5;
+    const barGrad = ctx.createLinearGradient(node.x + sweep, 0, node.x + sweep + node.width * 0.7, 0);
+    barGrad.addColorStop(0,   "rgba(230,168,23,0)");
+    barGrad.addColorStop(0.5, `rgba(230,168,23,${0.55 + pulse * 0.3})`);
+    barGrad.addColorStop(1,   "rgba(230,168,23,0)");
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(node.x, node.y + node.height - 3, node.width, 3);
+    ctx.restore();
+  }
+
+  // ── Status icon in header (top-right) ──────────────────────────────────────
+  const iconX = node.x + node.width - 12;
+  const iconY = node.y + 14;
+  ctx.save();
+  if (isRunning) {
+    // Pulsing ring
+    ctx.beginPath();
+    ctx.arc(iconX, iconY, 4.5 + pulse * 1.5, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${0.55 + pulse * 0.45})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(iconX, iconY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${0.7 + pulse * 0.3})`;
+    ctx.fill();
+  } else if (isDone) {
+    // Checkmark ✓
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth   = 1.8;
+    ctx.lineCap     = "round";
+    ctx.lineJoin    = "round";
+    ctx.beginPath();
+    ctx.moveTo(iconX - 4.5, iconY + 0.5);
+    ctx.lineTo(iconX - 1.5, iconY + 3.5);
+    ctx.lineTo(iconX + 4.5, iconY - 3.5);
+    ctx.stroke();
+  } else if (isError) {
+    // ✕ mark
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth   = 1.8;
+    ctx.lineCap     = "round";
+    ctx.beginPath();
+    ctx.moveTo(iconX - 4, iconY - 4);
+    ctx.lineTo(iconX + 4, iconY + 4);
+    ctx.moveTo(iconX + 4, iconY - 4);
+    ctx.lineTo(iconX - 4, iconY + 4);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Header label ──────────────────────────────────────────────────────────
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
   ctx.font = `600 10px ${FONT_BASE}`;
-  ctx.textAlign = "left";
+  ctx.textAlign    = "left";
   ctx.textBaseline = "middle";
   ctx.fillText(definition.label.toUpperCase(), node.x + 10, node.y + 14);
 
-  // Node title
-  ctx.fillStyle = "#333333";
-  ctx.font = `600 14px ${FONT_BASE}`;
+  // ── Node title ────────────────────────────────────────────────────────────
+  ctx.fillStyle    = isError ? "#b02800" : "#333333";
+  ctx.font         = `600 14px ${FONT_BASE}`;
   ctx.textBaseline = "top";
-  const titleY = isSDLC ? node.y + 36 : node.y + 40;
+  const titleY     = isSDLC ? node.y + 36 : node.y + 40;
   ctx.fillText(truncateText(ctx, node.title || definition.defaultTitle, node.width - 20), node.x + 10, titleY);
 
-  // Subtitle for SDLC nodes
+  // ── SDLC subtitle ─────────────────────────────────────────────────────────
   if (isSDLC) {
-    ctx.fillStyle = "#999999";
-    ctx.font = `11px ${FONT_BASE}`;
-    ctx.fillText(definition.label, node.x + 10, node.y + 56);
+    ctx.fillStyle = isRunning ? "rgba(180,110,0,0.6)" : isDone ? "rgba(16,100,60,0.5)" : "#999999";
+    ctx.font      = `11px ${FONT_BASE}`;
+    ctx.fillText(
+      isRunning ? "Running…" : isDone ? "Done" : isError ? "Error" : definition.label,
+      node.x + 10, node.y + 56
+    );
   }
 
   ctx.restore();
 
-  // Flow in port
-  if (definition.hasFlowIn) {
-    drawFlowPort(ctx, nodeFlowInCenter(node), accent, false);
-  }
+  // ── Ports ─────────────────────────────────────────────────────────────────
+  const portAccent = isRunning ? "#d4920f" : isError ? "#c72e0f" : isDone ? "#16825d" : accent;
 
-  // Flow out port (approve on Review, normal otherwise)
+  if (definition.hasFlowIn) drawFlowPort(ctx, nodeFlowInCenter(node), portAccent, false);
+
   if (definition.hasFlowOut) {
-    const approveColor = node.type === "review" ? "#1a9e5a" : accent;
+    const approveColor = node.type === "review" ? "#1a9e5a" : portAccent;
     const approvePoint = nodeFlowOutCenter(node);
     drawFlowPort(ctx, approvePoint, approveColor, false);
     if (node.type === "review") {
       ctx.save();
       ctx.font = `500 9px ${FONT_BASE}`;
-      ctx.fillStyle = "#1a9e5a";
-      ctx.textAlign = "center";
+      ctx.fillStyle    = "#1a9e5a";
+      ctx.textAlign    = "center";
       ctx.textBaseline = "bottom";
       ctx.fillText("Approve", approvePoint.x, approvePoint.y - 4);
       ctx.restore();
     }
   }
 
-  // Reject port (Review nodes only)
   if (definition.hasRejectOut) {
     const rejectPoint = nodeRejectOutCenter(node);
     drawFlowPort(ctx, rejectPoint, "#d93f3f", false);
     ctx.save();
     ctx.font = `500 9px ${FONT_BASE}`;
-    ctx.fillStyle = "#d93f3f";
-    ctx.textAlign = "center";
+    ctx.fillStyle    = "#d93f3f";
+    ctx.textAlign    = "center";
     ctx.textBaseline = "bottom";
     ctx.fillText("Reject", rejectPoint.x, rejectPoint.y - 4);
     ctx.restore();
   }
 
-  // Midput ports
   if (definition.hasMidputIn) {
-    drawMidputPort(ctx, nodeMidputLeftCenter(node), accent);
-    drawMidputPort(ctx, nodeMidputRightCenter(node), accent);
+    drawMidputPort(ctx, nodeMidputLeftCenter(node), portAccent);
+    drawMidputPort(ctx, nodeMidputRightCenter(node), portAccent);
   }
   if (definition.hasMidputOut) {
-    drawMidputPort(ctx, nodeMidputRightCenter(node), accent);
+    drawMidputPort(ctx, nodeMidputRightCenter(node), portAccent);
   }
 }
 
@@ -305,17 +405,18 @@ function drawEdge(
 
   // Animated flow pulse for edges entering a running node
   if (animTime !== undefined && edge.kind === "flow" && nodes.get(edge.targetId)?.status === "running") {
+    const pulse = Math.sin(animTime * 0.004) * 0.5 + 0.5;
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
     ctx.setLineDash([10, 8]);
-    ctx.lineDashOffset = -(animTime / 30);
-    ctx.strokeStyle = "#3b8af5";
-    ctx.lineWidth = 2.5;
-    ctx.globalAlpha = 0.82;
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = "#3b8af5";
+    ctx.lineDashOffset = -(animTime / 28);
+    ctx.strokeStyle = "#e6a817";
+    ctx.lineWidth   = 2.5;
+    ctx.globalAlpha = 0.65 + pulse * 0.3;
+    ctx.shadowBlur  = 10 + pulse * 8;
+    ctx.shadowColor = "#e6a817";
     ctx.stroke();
     ctx.restore();
   }
@@ -482,7 +583,7 @@ export function renderBoard(
   }
 
   for (const node of nodeMap.values()) {
-    drawNode(ctx, node, interactionState.selectedNodeId === node.id);
+    drawNode(ctx, node, interactionState.selectedNodeId === node.id, animTime);
   }
   drawGraphPreviewNodes(ctx, normalizedGraphPreview);
   drawPlacementPreview(ctx, interactionState.placementPreview);

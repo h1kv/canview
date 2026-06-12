@@ -92,6 +92,7 @@ export function Whiteboard({ username, workspace }: WhiteboardProps) {
     interactionStateRef,
     graphVersion,
     graphPreview,
+    chainRunning,
   });
 
   const {
