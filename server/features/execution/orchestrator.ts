@@ -145,6 +145,7 @@ interface NodeExecState {
   lastFileMapArtifact: string | null;
   evaluateRepairAttempts: Map<string, number>;
   acc: AccumulatedContext;
+  siblingCreateContext?: string;
 }
 
 interface NodeExecResult {
@@ -187,7 +188,12 @@ async function executeNode(
   } else if (SDLC_NODE_TYPES.includes(node.type as typeof SDLC_NODE_TYPES[number])) {
     const skill = loadSkill(node.type);
     const midputContent = await gatherMidputContent(node.id);
-    const taskPrompt = node.config?.taskPrompt ?? "";
+    let taskPrompt = node.config?.taskPrompt ?? "";
+    if (node.type === "create" && state.siblingCreateContext) {
+      taskPrompt = taskPrompt
+        ? `${taskPrompt}\n\n${state.siblingCreateContext}`
+        : state.siblingCreateContext;
+    }
 
     const isBlindInvestigate = node.type === "investigate" && acc.orderedNodeIds.length === 0;
     const userMessage = isBlindInvestigate
@@ -239,6 +245,24 @@ async function executeNode(
 
 // ── Parallel branch runner ────────────────────────────────────────────────────
 
+function collectBranchCreateSummaries(startNodeId: string): string[] {
+  const summaries: string[] = [];
+  const visited = new Set<string>();
+  let nodeId: string | null = startNodeId;
+  while (nodeId) {
+    if (visited.has(nodeId)) break;
+    visited.add(nodeId);
+    const node = nodes.get(nodeId);
+    if (!node || node.type === "merge") break;
+    if (node.type === "create") {
+      const prompt = node.config?.taskPrompt?.trim();
+      if (prompt) summaries.push(`"${node.title}": ${prompt}`);
+    }
+    nodeId = edgesFrom(nodeId, "flow")[0]?.targetId ?? null;
+  }
+  return summaries;
+}
+
 interface BranchResult {
   mergeNodeId: string;
   output: string;
@@ -249,7 +273,8 @@ async function runBranchUntilMerge(
   startNodeId: string,
   flowInput: string,
   acc: AccumulatedContext,
-  ctx: RunContext
+  ctx: RunContext,
+  siblingCreateContext?: string
 ): Promise<BranchResult> {
   let currentNodeId: string | null = startNodeId;
   const state: NodeExecState = {
@@ -257,6 +282,7 @@ async function runBranchUntilMerge(
     lastFileMapArtifact: null,
     evaluateRepairAttempts: new Map(),
     acc,
+    siblingCreateContext,
   };
   const branchTitle = nodes.get(startNodeId)?.title ?? startNodeId;
 
@@ -345,8 +371,21 @@ export async function orchestratorLoop(
 
         ctx.onLog("info", `[${node.title}] starting ${branchEdges.length} parallel branches`);
 
+        const branchCreateSummaries = branchEdges.map((e) => ({
+          startId: e.targetId,
+          summaries: collectBranchCreateSummaries(e.targetId),
+        }));
+
         const branchResults = await Promise.all(
-          branchEdges.map((e) => runBranchUntilMerge(e.targetId, state.flowInput, cloneAccumulatedContext(acc), ctx))
+          branchEdges.map((e, i) => {
+            const siblingLines = branchCreateSummaries
+              .filter((_, j) => j !== i)
+              .flatMap((b) => b.summaries);
+            const siblingCreateContext = siblingLines.length > 0
+              ? `PARALLEL COORDINATION — other concurrent branches own these files. Do NOT create any of them:\n${siblingLines.map((l) => `  • ${l}`).join("\n")}\nOnly output the files explicitly assigned to your task above.`
+              : undefined;
+            return runBranchUntilMerge(e.targetId, state.flowInput, cloneAccumulatedContext(acc), ctx, siblingCreateContext);
+          })
         );
 
         const mergeIds = [...new Set(branchResults.map((r) => r.mergeNodeId).filter(Boolean))];

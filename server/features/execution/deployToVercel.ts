@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCb);
 
-const BRANCH = "rapid-deployments";
+const BRANCH = "main";
 
 interface VercelDeployment {
   uid: string;

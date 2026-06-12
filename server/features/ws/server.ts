@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import { WebSocketServer } from "ws";
-import { clients, users, userColors, colorIndex, incrementColorIndex, broadcast } from "../state/store.js";
+import { clients, users, userColors, colorIndex, incrementColorIndex, broadcast, deactivateWorkspace } from "../state/store.js";
 import { createId } from "../../utils/id.js";
 import { debug } from "../../utils/debug.js";
 import { dispatchMessage } from "./dispatch.js";
@@ -45,6 +45,7 @@ export function setupWebSocketServer(httpServer: Server): void {
       users.delete(userId);
       broadcast({ type: "user:left", userId });
       debug("close", { userId, name: user.name, clients: clients.size });
+      if (clients.size === 0) deactivateWorkspace();
     });
   });
 }

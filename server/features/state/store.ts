@@ -308,9 +308,22 @@ export function activateWorkspace(name: string): void {
   activeWorkspaceName = safe;
   const dir = process.env.DISPATCH_WORKSPACE_STATE_DIR ?? path.join(process.cwd(), ".dispatch");
   workspaceStateFileOverride = path.join(dir, `${safe}.json`);
-  hydrateWorkspaceState();
+  const hydrated = hydrateWorkspaceState();
+  if (!hydrated) {
+    nodes.clear();
+    edges.clear();
+    chatTranscript = [];
+    planExcalidrawData = DEFAULT_PLAN_ELEMENTS;
+  }
   persistenceSuspended = false;
   console.log(`[workspace] activated "${safe}" → ${workspaceStateFileOverride}`);
+}
+
+export function deactivateWorkspace(): void {
+  activeWorkspaceName = "";
+  workspaceStateFileOverride = null;
+  persistenceSuspended = true;
+  console.log("[workspace] all clients disconnected — ready for next session");
 }
 
 export function setWorkspaceStateFileForTests(filePath: string | null): void {

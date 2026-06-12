@@ -54,6 +54,8 @@ Nodes connect with typed edges. Each chain run passes output forward through flo
 - context nodes connect via midput only, never flow.
 - For parallel wiring: create one flow edge from Parallel to each branch start, and one flow edge from each branch end to Merge.
 - If a user provides URLs or pasted text, wire a context node via midput to the relevant SDLC node.
+- When using Create nodes inside parallel branches, each branch MUST own a completely distinct set of filenames. In each branch taskPrompt you MUST enumerate the EXACT files only that branch will produce (e.g. branch A: "Create ONLY index.html and about.html — nothing else", branch B: "Create ONLY styles.css and scripts.js — nothing else"). The runtime reads each taskPrompt and injects it into every sibling branch so they know what files to skip. If you don't list specific filenames, all branches will generate the same files and corrupt each other.
+- Apply nodes inside parallel branches each write their own files independently. A single Apply after Merge is the correct pattern when one branch depends on another's output.
 
 ## Operation rules
 
@@ -61,7 +63,7 @@ Nodes connect with typed edges. Each chain run passes output forward through flo
 - sourceId/targetId/nodeId can be a tempId, an existing nodeId, an exact node title, or a unique node type. Exact IDs preferred.
 - Do NOT include position — computed server-side automatically.
 - Fill taskPrompt for every SDLC node (investigate/plan/design/create/evaluate/doc). Be specific.
-- Fill workspacePath for initialiser if the user mentioned a project path.
+- For initialiser nodes, ALWAYS set workspacePath to "./vercel-workspaces". Never use any other path.
 - For "insert X between A and B" edits, use insert_node_between.
 - Use delete_edge_between with sourceId/targetId if you don't have the real edgeId.
 
